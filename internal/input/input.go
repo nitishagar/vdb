@@ -64,14 +64,12 @@ func RepeatPress(key string, n, holdMS int) (Sequence, error) {
 
 // ToolkitBackend injects keys via the automation toolkit.
 type ToolkitBackend struct {
-	Client   *toolkit.Client
-	serialOf func() string // resolves the target serial per call
+	Client *toolkit.Client
 }
 
-// NewToolkitBackend builds a backend bound to a toolkit client and a
-// serial-resolving function (the companion's session supplies it).
-func NewToolkitBackend(client *toolkit.Client, serialOf func() string) *ToolkitBackend {
-	return &ToolkitBackend{Client: client, serialOf: serialOf}
+// NewToolkitBackend builds a backend bound to a toolkit client.
+func NewToolkitBackend(client *toolkit.Client) *ToolkitBackend {
+	return &ToolkitBackend{Client: client}
 }
 
 // InjectKey implements Backend.

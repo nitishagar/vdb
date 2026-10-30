@@ -10,6 +10,7 @@ package vda
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -114,25 +115,39 @@ func (i *Impl) Pull(ctx context.Context, serial, remote, local string) error {
 }
 
 type cmdForward struct {
-	bin     string
-	serial  string
-	port    int
-	release func() // test seam: nil in production
+	bin    string
+	serial string
+	port   int
 }
 
 func (f *cmdForward) LocalPort() int { return f.port }
 
 func (f *cmdForward) Release(ctx context.Context) error {
-	if f.release != nil {
-		f.release()
-	}
 	_, err := execrun.Run(ctx, f.bin, "-s", f.serial, "forward", "--remove", "tcp:"+strconv.Itoa(f.port))
-	if err != nil {
-		// Releasing an already-removed forward is not an error for our
-		// purposes; the invariant is "no forward left behind".
+	if err == nil {
 		return nil
 	}
-	return nil
+	// An already-removed forward satisfies the invariant; anything else is
+	// a real failure the caller must see.
+	blob := ""
+	var nz *execrun.ErrNonZero
+	if errors.As(err, &nz) {
+		blob = nz.Stderr + nz.Stdout
+	}
+	if containsAnyFold(blob, "not found", "no such", "listener", "does not exist") {
+		return nil
+	}
+	return fmt.Errorf("vda release forward tcp:%d: %w", f.port, err)
+}
+
+func containsAnyFold(s string, subs ...string) bool {
+	low := strings.ToLower(s)
+	for _, sub := range subs {
+		if strings.Contains(low, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseDevices parses `vda devices -l` output. Golden fixtures:

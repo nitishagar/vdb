@@ -211,3 +211,40 @@ func TestOneNodeTree(t *testing.T) {
 		t.Error("hash must exist")
 	}
 }
+
+// I3 regression: geometry never silently corrupts — overflow and malformed
+// values become zero WITH a parse warning (invariant 7).
+func TestParseGeometryOverflowAndMalformedWarn(t *testing.T) {
+	tr := mustParse(t, `<root><app id="o"><window x="0" y="0" width="1920" height="1080">`+
+		`<child x="2147483648" y="-2147483649" width="12ab" height="50" role="cell" test_id="bad" focusable="true"/>`+
+		`</window></app></root>`)
+	cell := tr.Find(func(e *Element) bool { return e.TestID == "bad" })
+	if cell == nil {
+		t.Fatal("cell missing")
+	}
+	if cell.Rect.X != 0 || cell.Rect.Y != 0 || cell.Rect.Width != 0 {
+		t.Errorf("corrupt geometry must be zero, got %+v", cell.Rect)
+	}
+	if cell.Rect.Height != 50 {
+		t.Errorf("valid field must parse, got %+v", cell.Rect)
+	}
+	if len(tr.Warnings) < 3 {
+		t.Errorf("expected ≥3 parse warnings, got %v", tr.Warnings)
+	}
+}
+
+func TestParseMissingAttributesAssertsWarning(t *testing.T) {
+	tr := mustParse(t, `<root><app id="a"><window><child role="row"/></window></app></root>`)
+	if len(tr.Warnings) == 0 {
+		t.Fatal("a leaf node with no geometry attributes must produce a parse warning")
+	}
+	found := false
+	for _, w := range tr.Warnings {
+		if strings.Contains(w, "no geometry") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("warnings = %v", tr.Warnings)
+	}
+}

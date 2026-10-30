@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -137,23 +138,25 @@ func (n *xmlNode) toElement(appID *string, t *Tree) Element {
 	}
 	e.Text = strings.TrimSpace(n.Text)
 
-	// Geometry: missing x/y/w/h is a parse warning, geometry stays zero.
+	// Geometry: missing x/y/w/h is a parse warning, geometry stays zero;
+	// malformed or overflowing values also warn (never silently corrupt).
 	rectSet := false
-	if v, ok := n.attr("x"); ok {
-		e.Rect.X = atoi32(v)
+	for _, g := range []struct {
+		name string
+		dst  *int32
+	}{
+		{"x", &e.Rect.X}, {"y", &e.Rect.Y}, {"width", &e.Rect.Width}, {"height", &e.Rect.Height},
+	} {
+		v, ok := n.attr(g.name)
+		if !ok {
+			continue
+		}
 		rectSet = true
-	}
-	if v, ok := n.attr("y"); ok {
-		e.Rect.Y = atoi32(v)
-		rectSet = true
-	}
-	if v, ok := n.attr("width"); ok {
-		e.Rect.Width = atoi32(v)
-		rectSet = true
-	}
-	if v, ok := n.attr("height"); ok {
-		e.Rect.Height = atoi32(v)
-		rectSet = true
+		parsed, valid := atoi32(v)
+		*g.dst = parsed
+		if !valid {
+			t.Warnings = append(t.Warnings, fmt.Sprintf("node %s/%s has malformed %s=%q", n.XMLName.Local, e.bestID(), g.name, v))
+		}
 	}
 	if !rectSet && len(n.Children) == 0 && n.XMLName.Local != "root" {
 		t.Warnings = append(t.Warnings, fmt.Sprintf("node %s/%s has no geometry", n.XMLName.Local, e.bestID()))
@@ -203,23 +206,15 @@ func (e *Element) bestID() string {
 	return e.Role
 }
 
-func atoi32(s string) int32 {
-	var v int32
-	neg := false
-	for i, c := range strings.TrimSpace(s) {
-		if i == 0 && c == '-' {
-			neg = true
-			continue
-		}
-		if c < '0' || c > '9' {
-			return 0 // malformed geometry stays zero; warnings elsewhere
-		}
-		v = v*10 + int32(c-'0')
+// atoi32 parses int32 geometry via the stdlib; the caller records a parse
+// warning on failure (invariant 7: geometry never silently corrupts —
+// malformed or overflowing values become zero WITH a warning).
+func atoi32(s string) (int32, bool) {
+	v, err := strconv.ParseInt(strings.TrimSpace(s), 10, 32)
+	if err != nil {
+		return 0, false
 	}
-	if neg {
-		return -v
-	}
-	return v
+	return int32(v), true
 }
 
 // Hash returns a stable digest of the tree's semantic content — element

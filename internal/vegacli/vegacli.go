@@ -39,11 +39,13 @@ type AppInfo struct {
 
 // LogStream is a live `vega device start-log-stream` subprocess. Lines are
 // delivered on the channel; Stop kills and waits the subprocess. The channel
-// closes when the stream ends (EOF, error, or Stop).
+// closes when the stream ends (EOF, error, or Stop). A stalled consumer
+// never deadlocks Stop: the pump abandons buffered lines when told to stop.
 type LogStream struct {
 	cmd    *exec.Cmd
 	lines  chan string
 	done   chan struct{}
+	stop   chan struct{}
 	stderr string
 }
 
@@ -52,6 +54,7 @@ func (s *LogStream) Lines() <-chan string { return s.lines }
 
 // Stop terminates the stream subprocess and waits for full reaping.
 func (s *LogStream) Stop() {
+	close(s.stop) // unblocks a pump wedged on a full line channel
 	if s.cmd.Process != nil {
 		// Group kill: the CLI may wrap children that hold our pipes.
 		if err := syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL); err != nil {
@@ -88,8 +91,8 @@ func (i *Impl) Bin() string { return i.bin }
 func (i *Impl) Install(ctx context.Context, serial, pkgPath string) (LifecycleResult, error) {
 	res, err := execrun.Run(ctx, i.bin, "device", "install-app", "-s", serial, pkgPath)
 	if err != nil {
-		if r, ok := parseAlreadySo(res, err); ok {
-			return r, nil
+		if containsAny(res.Stderr+res.Stdout, "already installed") {
+			return ResultAlreadyInstalled, nil
 		}
 		return "", fmt.Errorf("vega install-app: %w", err)
 	}
@@ -99,8 +102,9 @@ func (i *Impl) Install(ctx context.Context, serial, pkgPath string) (LifecycleRe
 func (i *Impl) Uninstall(ctx context.Context, serial, componentID string) (LifecycleResult, error) {
 	res, err := execrun.Run(ctx, i.bin, "device", "uninstall-app", "-s", serial, componentID)
 	if err != nil {
-		if r, ok := parseAlreadySo(res, err); ok {
-			return r, nil
+		blob := res.Stderr + res.Stdout
+		if containsAny(blob, "not installed", "no such package", "not found") {
+			return ResultNotInstalled, nil
 		}
 		return "", fmt.Errorf("vega uninstall-app: %w", err)
 	}
@@ -118,8 +122,9 @@ func (i *Impl) Launch(ctx context.Context, serial, componentID string) error {
 func (i *Impl) Terminate(ctx context.Context, serial, componentID string) (LifecycleResult, error) {
 	res, err := execrun.Run(ctx, i.bin, "device", "terminate-app", "-s", serial, componentID)
 	if err != nil {
-		if r, ok := parseAlreadySo(res, err); ok {
-			return r, nil
+		blob := res.Stderr + res.Stdout
+		if containsAny(blob, "not running", "is not running") {
+			return ResultNotRunning, nil
 		}
 		return "", fmt.Errorf("vega terminate-app: %w", err)
 	}
@@ -148,7 +153,7 @@ func (i *Impl) StartLogStream(ctx context.Context, serial string) (*LogStream, e
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("vega log stream: %w", err)
 	}
-	s := &LogStream{cmd: cmd, lines: make(chan string, 128), done: make(chan struct{})}
+	s := &LogStream{cmd: cmd, lines: make(chan string, 128), done: make(chan struct{}), stop: make(chan struct{})}
 	go func() {
 		defer close(s.done)
 		defer close(s.lines)
@@ -170,22 +175,6 @@ func (i *Impl) StartLogStream(ctx context.Context, serial string) (*LogStream, e
 	return s, nil
 }
 
-// parseAlreadySo inspects a failed run for idempotent no-op conditions.
-// The exact phrases are assumptions isolated here (golden-fixture driven).
-func parseAlreadySo(res execrun.Result, err error) (LifecycleResult, bool) {
-	blob := res.Stderr + res.Stdout
-	switch {
-	case containsAny(blob, "already installed"):
-		return ResultAlreadyInstalled, true
-	case containsAny(blob, "not installed", "no such package", "not found"):
-		return ResultNotInstalled, true
-	case containsAny(blob, "not running", "is not running"):
-		return ResultNotRunning, true
-	}
-	_ = err
-	return "", false
-}
-
 func containsAny(s string, subs ...string) bool {
 	for _, sub := range subs {
 		if strings.Contains(s, sub) {
@@ -199,13 +188,19 @@ func containsAny(s string, subs ...string) bool {
 // "<component_id>\\t<name>" per line. Golden: testdata/apps_*.golden.
 func ParseApps(out string) ([]AppInfo, error) {
 	var apps []AppInfo
-	for _, ln := range strings.Split(out, "\n") {
+	for n, ln := range strings.Split(out, "\n") {
 		ln = strings.TrimRight(ln, "\r")
 		if ln == "" {
 			continue
 		}
 		parts := strings.SplitN(ln, "\t", 2)
-		app := AppInfo{ComponentID: strings.TrimSpace(parts[0])}
+		id := strings.TrimSpace(parts[0])
+		// Malformed output errors; a silent bogus entry would corrupt
+		// every caller's view of installed apps (invariant 3).
+		if id == "" || strings.Contains(id, " ") {
+			return nil, fmt.Errorf("vega: malformed installed-apps output line %d: %q", n+1, ln)
+		}
+		app := AppInfo{ComponentID: id}
 		if len(parts) == 2 {
 			app.Name = strings.TrimSpace(parts[1])
 		}

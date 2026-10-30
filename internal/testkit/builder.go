@@ -39,9 +39,6 @@ func FakeVDA(t testing.TB) string {
 	if buildErr != nil {
 		t.Fatalf("testkit: %v", buildErr)
 	}
-	t.Cleanup(func() {
-		// Best-effort: binary is process-wide; removed when tests exit.
-	})
 	return binPath
 }
 

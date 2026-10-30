@@ -47,16 +47,8 @@ func Run(ctx context.Context, path string, args ...string) (Result, error) {
 	return run(ctx, path, args, 10*time.Second)
 }
 
-// RunWithEnv is Run with extra environment variables appended to os.Environ.
-func RunWithEnv(ctx context.Context, env []string, path string, args ...string) (Result, error) {
-	return run(ctx, path, args, 10*time.Second, env...)
-}
-
-func run(ctx context.Context, path string, args []string, grace time.Duration, env ...string) (Result, error) {
+func run(ctx context.Context, path string, args []string, grace time.Duration) (Result, error) {
 	cmd := exec.Command(path, args...)
-	if len(env) > 0 {
-		cmd.Env = append(cmd.Environ(), env...)
-	}
 	// Own process group: children of the child (shell wrappers, daemons)
 	// die with it — a lone child kill lets grandchildren hold our pipes.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

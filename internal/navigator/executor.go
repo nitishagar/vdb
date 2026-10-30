@@ -43,7 +43,8 @@ type KeyInjector interface {
 
 // Executor runs closed-loop navigation: exactly one tree read per press
 // (the post-press read doubles as the next planning state), matching the
-// plan's cost model of 2k+1 device calls for k presses.
+// plan's cost model of 2k+1 device calls for k presses. Budget is the hard
+// bound on TOTAL presses — plan-path, scroll, and alternate-axis alike.
 type Executor struct {
 	Source TreeSource
 	Keys   KeyInjector
@@ -52,8 +53,8 @@ type Executor struct {
 }
 
 // Navigate moves focus to the element matching sel, re-reading the tree
-// after every press. The loop always terminates within Budget presses or a
-// structured error.
+// after every press. The loop always terminates within Budget TOTAL presses
+// or a structured error.
 func (x *Executor) Navigate(ctx context.Context, sel Selector) (Result, error) {
 	budget := x.Budget
 	if budget <= 0 {
@@ -78,11 +79,11 @@ func (x *Executor) Navigate(ctx context.Context, sel Selector) (Result, error) {
 			// Virtualized list heuristic: the target is below the rendered
 			// window in the common case — bounded scroll pulses, re-check.
 			if scrollPulses >= maxScrollPulses {
-				return res, fmt.Errorf("%w (selector %s=%s)", ErrTargetNotFound, sel.Field, sel.Value)
+				return res, x.fail(tr, fmt.Errorf("%w (selector %s=%s)", ErrTargetNotFound, sel.Field, sel.Value))
 			}
 			scrollPulses++
-			if err := x.advance(ctx, &res, tr, "DOWN", &noProgress, sel); err != nil {
-				return res, err
+			if err := x.advance(ctx, &res, tr, "DOWN", budget, &noProgress, sel); err != nil {
+				return res, x.fail(tr, err)
 			}
 			continue
 		}
@@ -96,22 +97,18 @@ func (x *Executor) Navigate(ctx context.Context, sel Selector) (Result, error) {
 
 		step := PlanStep(focused, target)
 		if step.Key == "" {
-			return res, fmt.Errorf("%w (planner cannot move toward %s=%s)", ErrNoProgress, sel.Field, sel.Value)
+			return res, x.fail(tr, fmt.Errorf("%w (planner cannot move toward %s=%s)", ErrNoProgress, sel.Field, sel.Value))
 		}
 
 		// Trap check BEFORE pressing: revisit of an exact focus+tree state.
 		stateKey := fmt.Sprintf("%s|%s", idOf(focused), tr.Hash())
 		if visited[stateKey] {
-			return res, fmt.Errorf("%w at %s after %d steps", ErrTrap, idOf(focused), len(res.Steps))
+			return res, x.fail(tr, fmt.Errorf("%w at %s after %d steps", ErrTrap, idOf(focused), len(res.Steps)))
 		}
 		visited[stateKey] = true
 
-		if len(res.Steps) >= budget {
-			return res, fmt.Errorf("%w (%d steps, budget %d)", ErrBudgetExceeded, len(res.Steps), budget)
-		}
-
-		if err := x.advance(ctx, &res, tr, step.Key, &noProgress, sel); err != nil {
-			return res, err
+		if err := x.advance(ctx, &res, tr, step.Key, budget, &noProgress, sel); err != nil {
+			return res, x.fail(tr, err)
 		}
 		// advance updated tr to the post-press tree.
 	}
@@ -121,8 +118,12 @@ const maxScrollPulses = 4
 
 // advance presses key, reads the post-press tree into *cur, and updates
 // no-progress tracking. The post-press read doubles as the next planning
-// state (one read per press).
-func (x *Executor) advance(ctx context.Context, res *Result, cur *tree.Tree, key string, noProgress *int, sel Selector) error {
+// state (one read per press). The budget check lives HERE so every press
+// kind (plan, scroll, alternate axis) is bounded.
+func (x *Executor) advance(ctx context.Context, res *Result, cur *tree.Tree, key string, budget int, noProgress *int, sel Selector) error {
+	if len(res.Steps) >= budget {
+		return fmt.Errorf("%w (%d steps, budget %d)", ErrBudgetExceeded, len(res.Steps), budget)
+	}
 	preFocused := cur.Focused()
 	if err := x.Keys.InjectKey(ctx, x.Serial, key, 0); err != nil {
 		return fmt.Errorf("navigator: inject %s: %w", key, err)
@@ -143,7 +144,7 @@ func (x *Executor) advance(ctx context.Context, res *Result, cur *tree.Tree, key
 			return fmt.Errorf("%w: pressing %s left focus on %s", ErrNoProgress, key, idOf(preFocused))
 		}
 		// One alternate-axis press before declaring stasis.
-		if alt := alternateAxis(key, preFocused, next.Find(sel.Matches)); alt != "" {
+		if alt := alternateAxis(key, preFocused, next.Find(sel.Matches)); alt != "" && len(res.Steps) < budget {
 			if err := x.Keys.InjectKey(ctx, x.Serial, alt, 0); err != nil {
 				return fmt.Errorf("navigator: inject %s: %w", alt, err)
 			}
@@ -160,6 +161,34 @@ func (x *Executor) advance(ctx context.Context, res *Result, cur *tree.Tree, key
 	}
 	*cur = *next
 	return nil
+}
+
+// fail records the last-known focus state on a failing result (diagnostics
+// for agents — invariant 20) and returns the error unchanged.
+func (x *Executor) fail(tr *tree.Tree, err error) error {
+	if f := tr.Focused(); f != nil {
+		return focusError{err, FocusState{FocusedID: idOf(f), TreeDigest: tr.Hash()}}
+	}
+	return err
+}
+
+// focusError decorates a termination error with the last-observed focus.
+type focusError struct {
+	cause error
+	state FocusState
+}
+
+func (e focusError) Error() string { return e.cause.Error() }
+func (e focusError) Unwrap() error { return e.cause }
+
+// FocusDiagnostics extracts the last-known focus state from a navigation
+// error, if present.
+func FocusDiagnostics(err error) (FocusState, bool) {
+	var fe focusError
+	if errors.As(err, &fe) {
+		return fe.state, true
+	}
+	return FocusState{}, false
 }
 
 func alternateAxis(last string, focused, target *tree.Element) string {

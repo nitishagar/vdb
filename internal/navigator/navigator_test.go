@@ -387,3 +387,69 @@ func TestPlanStepTiePrefersVertical(t *testing.T) {
 		t.Errorf("zero-delta plan = %+v", s)
 	}
 }
+
+// I2 regression: budget is the hard TOTAL press bound — including the
+// alternate-axis fallback and scroll pulses.
+func TestBudgetBindsAlternateAxisPress(t *testing.T) {
+	// Grid frozen after any press with target present: first press RIGHT
+	// (stasis), then the alt-axis DOWN would be the second press — budget 1
+	// must forbid it.
+	pages := make([]string, 10)
+	for i := range pages {
+		pages[i] = gridXML("item-11")
+	}
+	src := &scriptedSource{pages: pages}
+	inj := &recordingInjector{}
+	x := &Executor{Source: src, Keys: inj, Budget: 1}
+	_, err := x.Navigate(context.Background(), Selector{Field: "test_id", Value: "item-22"})
+	if err == nil {
+		t.Fatal("frozen grid must error")
+	}
+	if len(inj.presses) > 1 {
+		t.Errorf("presses = %v with budget 1 — budget must bind ALL press kinds", inj.presses)
+	}
+}
+
+func TestBudgetBindsScrollPulses(t *testing.T) {
+	// Target absent forever; budget 2 caps scroll presses at 2 even though
+	// maxScrollPulses would allow 4.
+	window := func(first int) string {
+		var b strings.Builder
+		b.WriteString(`<root><app id="v"><window x="0" y="0" width="1920" height="1080">`)
+		for i := 0; i < 3; i++ {
+			b.WriteString(`<child x="100" y="` + itoa(100+i*200) + `" width="500" height="150" role="row" test_id="item-` + itoa(first+i) + `" focusable="true" focused="` + boolStr(i == 0) + `"/>`)
+		}
+		b.WriteString(`</window></app></root>`)
+		return b.String()
+	}
+	pages := make([]string, 10)
+	for i := range pages {
+		pages[i] = window(1 + i)
+	}
+	src := &scriptedSource{pages: pages}
+	inj := &recordingInjector{}
+	x := &Executor{Source: src, Keys: inj, Budget: 2}
+	_, err := x.Navigate(context.Background(), Selector{Field: "test_id", Value: "item-999"})
+	if err == nil {
+		t.Fatal("must terminate with an error")
+	}
+	if len(inj.presses) > 2 {
+		t.Errorf("presses = %d with budget 2 — scroll presses must be budget-bound", len(inj.presses))
+	}
+}
+
+// Failing navigations still return the last-known focus (diagnostics for
+// agents — invariant 20).
+func TestFailedNavigateCarriesFocusDiagnostics(t *testing.T) {
+	src := &scriptedSource{pages: []string{gridXML("item-11"), gridXML("item-11"), gridXML("item-11")}}
+	inj := &recordingInjector{}
+	x := &Executor{Source: src, Keys: inj}
+	_, err := x.Navigate(context.Background(), Selector{Field: "test_id", Value: "item-22"})
+	if err == nil {
+		t.Fatal("want trap error")
+	}
+	state, ok := FocusDiagnostics(err)
+	if !ok || state.FocusedID != "test_id:item-11" || state.TreeDigest == "" {
+		t.Errorf("failure focus diagnostics = %+v ok=%v", state, ok)
+	}
+}

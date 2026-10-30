@@ -2,7 +2,6 @@ package vegacli
 
 import (
 	"context"
-	execrun "github.com/nitishagar/vdb/internal/execrun"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,30 +32,37 @@ func TestParseApps(t *testing.T) {
 }
 
 // Idempotent lifecycle semantics (invariant 6): already-so outcomes are
-// typed results, not errors.
-func TestParseAlreadySo(t *testing.T) {
-	cases := []struct {
-		stderr string
-		want   LifecycleResult
-	}{
-		{"Package com.example.app is already installed", ResultAlreadyInstalled},
-		{"Package com.example.app is not installed", ResultNotInstalled},
-		{"no such package: com.example.app", ResultNotInstalled},
-		{"App com.example.app is not running", ResultNotRunning},
-		{"some unrelated hard failure", ""},
-	}
-	for _, tc := range cases {
-		got, ok := parseAlreadySo(execrun.Result{Stderr: tc.stderr}, nil)
-		if tc.want == "" {
-			if ok {
-				t.Errorf("stderr %q: unexpected result %s", tc.stderr, got)
-			}
-			continue
+// typed per-verb results, never errors — and verb phrases never leak
+// across verbs (install failing with "not found" is a hard error).
+func TestLifecyclePerVerbAlreadySo(t *testing.T) {
+	t.Run("install already installed", func(t *testing.T) {
+		impl := fakeVega(t, "already")
+		res, err := impl.Install(context.Background(), "S", "pkg.vpkg")
+		if err != nil || res != ResultAlreadyInstalled {
+			t.Fatalf("res=%s err=%v", res, err)
 		}
-		if !ok || got != tc.want {
-			t.Errorf("stderr %q: want %s got %s ok=%v", tc.stderr, tc.want, got, ok)
+	})
+	t.Run("install with not-found wording is a hard error", func(t *testing.T) {
+		impl := fakeVega(t, "notinstalled")
+		_, err := impl.Install(context.Background(), "S", "pkg.vpkg")
+		if err == nil {
+			t.Fatal("install must not swallow not-found as a no-op")
 		}
-	}
+	})
+	t.Run("uninstall absent", func(t *testing.T) {
+		impl := fakeVega(t, "notinstalled")
+		res, err := impl.Uninstall(context.Background(), "S", "com.example.app")
+		if err != nil || res != ResultNotInstalled {
+			t.Fatalf("res=%s err=%v", res, err)
+		}
+	})
+	t.Run("terminate not running", func(t *testing.T) {
+		impl := fakeVega(t, "notrunning")
+		res, err := impl.Terminate(context.Background(), "S", "com.example.app")
+		if err != nil || res != ResultNotRunning {
+			t.Fatalf("res=%s err=%v", res, err)
+		}
+	})
 }
 
 // --- Impl against a scriptable fake vega binary ------------------------------
@@ -76,6 +82,7 @@ case "$FAKEVEGA_MODE" in
   hard) echo "segfault" >&2; exit 139 ;;
   apps) printf 'com.example.app\tExample App\ncom.example.other\tOther App\n'; exit 0 ;;
   logs) for i in 1 2 3 4 5; do echo "line$i"; done; sleep 30 ;;
+  flood) for i in $(seq 1 500); do echo "flood$i"; done; sleep 30 ;;
 esac
 echo unhandled >&2; exit 9
 `
@@ -84,39 +91,6 @@ echo unhandled >&2; exit 9
 	}
 	t.Setenv("FAKEVEGA_MODE", mode)
 	return New(script)
-}
-
-func TestInstallAlreadyInstalledIsNoOp(t *testing.T) {
-	impl := fakeVega(t, "already")
-	res, err := impl.Install(context.Background(), "S", "pkg.vpkg")
-	if err != nil {
-		t.Fatalf("Install already-installed must not error: %v", err)
-	}
-	if res != ResultAlreadyInstalled {
-		t.Errorf("res = %s", res)
-	}
-}
-
-func TestTerminateNotRunningIsNoOp(t *testing.T) {
-	impl := fakeVega(t, "notrunning")
-	res, err := impl.Terminate(context.Background(), "S", "com.example.app")
-	if err != nil {
-		t.Fatalf("Terminate not-running must not error: %v", err)
-	}
-	if res != ResultNotRunning {
-		t.Errorf("res = %s", res)
-	}
-}
-
-func TestUninstallAbsentIsNoOp(t *testing.T) {
-	impl := fakeVega(t, "notinstalled")
-	res, err := impl.Uninstall(context.Background(), "S", "com.example.app")
-	if err != nil {
-		t.Fatalf("Uninstall absent must not error: %v", err)
-	}
-	if res != ResultNotInstalled {
-		t.Errorf("res = %s", res)
-	}
 }
 
 func TestInstallHardFailureIsError(t *testing.T) {
@@ -138,6 +112,15 @@ func TestInstallSuccess(t *testing.T) {
 	}
 }
 
+func TestParseAppsMalformedErrors(t *testing.T) {
+	if _, err := ParseApps("com.ok\tFine\n   \tNoId\n"); err == nil {
+		t.Fatal("line without component id must error")
+	}
+	if _, err := ParseApps("has space\tName\n"); err == nil {
+		t.Fatal("component id containing a space must error")
+	}
+}
+
 func TestListAppsAgainstFake(t *testing.T) {
 	impl := fakeVega(t, "apps")
 	apps, err := impl.ListApps(context.Background(), "S")
@@ -146,6 +129,29 @@ func TestListAppsAgainstFake(t *testing.T) {
 	}
 	if len(apps) != 2 || apps[0].ComponentID != "com.example.app" {
 		t.Fatalf("apps = %+v", apps)
+	}
+}
+
+// I1 regression: a consumer that stops draining while the subprocess floods
+// lines must not wedge Stop (the pump abandons the buffer on stop).
+func TestLogStreamStopWithFloodedBuffer(t *testing.T) {
+	impl := fakeVega(t, "flood")
+	stream, err := impl.StartLogStream(context.Background(), "S")
+	if err != nil {
+		t.Fatalf("StartLogStream: %v", err)
+	}
+	// Read ONE line so the producer is running; never drain again.
+	select {
+	case <-stream.Lines():
+	case <-time.After(3 * time.Second):
+		t.Fatal("no first line")
+	}
+	done := make(chan struct{})
+	go func() { stream.Stop(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Stop deadlocked on a flooded buffer")
 	}
 }
 

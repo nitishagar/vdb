@@ -46,7 +46,6 @@ type Call struct {
 
 // Server is the fake toolkit.
 type Server struct {
-	t        testing.TB
 	mu       sync.Mutex
 	script   map[string][]Step
 	pos      map[string]int
@@ -61,7 +60,6 @@ type Server struct {
 func New(t testing.TB) *Server {
 	t.Helper()
 	s := &Server{
-		t:      t,
 		script: map[string][]Step{},
 		pos:    map[string]int{},
 	}
@@ -82,10 +80,9 @@ func New(t testing.TB) *Server {
 // URL is the base URL to point a toolkit.Client at.
 func (s *Server) URL() string { return s.url }
 
-// Script installs a response sequence for a method. When the sequence is
-// exhausted, the last step repeats — a deliberate foot-gun avoided: the
-// server instead returns an explicit "script exhausted" error so tests
-// notice undersized scripts.
+// Script installs a response sequence for a method. Exhausted scripts
+// return an explicit "script exhausted" JSON-RPC error so undersized test
+// scripts fail loudly instead of silently repeating.
 func (s *Server) Script(method string, steps ...Step) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -206,9 +203,9 @@ var ValidPNG = []byte{
 	0x00, 0x00, 0x00, 0x00, 'I', 'E', 'N', 'D', 0xae, 0x42, 0x60, 0x82,
 }
 
-// PNGWithByte returns a copy of ValidPNG with byte index i of the IDAT-ish
-// body varied, producing a different digest while remaining structurally a
-// PNG for header validation. For stale-vs-fresh scripting.
+// PNGWithByte returns a copy of ValidPNG with one body byte varied,
+// producing a different digest while remaining a valid header for
+// validation purposes. For stale-vs-fresh scripting.
 func PNGWithByte(i, v byte) []byte {
 	b := make([]byte, len(ValidPNG))
 	copy(b, ValidPNG)

@@ -10,12 +10,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 	"sync/atomic"
 )
 
@@ -280,40 +284,21 @@ func (c *Client) takeScreenshot(ctx context.Context, prevDigest string, fresh fr
 }
 
 func asRPC(err error, target **RPCError) bool {
-	rpcErr, ok := err.(*RPCError)
-	if ok {
-		*target = rpcErr
-	}
-	return ok
+	return errors.As(err, target)
 }
 
 func isNullBufferMessage(msg string) bool {
-	return bytes.Contains([]byte(msg), []byte("Buffer is null"))
+	return strings.Contains(msg, "Buffer is null")
 }
 
 // IsTransport reports whether err is forward/connection-level.
 func IsTransport(err error) bool {
-	te := &TransportError{}
-	return asTransport(err, te)
+	var te *TransportError
+	return errors.As(err, &te)
 }
 
-func asTransport(err error, target *TransportError) bool {
-	for err != nil {
-		if t, ok := err.(*TransportError); ok {
-			*target = *t
-			return true
-		}
-		u, ok := err.(interface{ Unwrap() error })
-		if !ok {
-			return false
-		}
-		err = u.Unwrap()
-	}
-	return false
-}
-
-// validatePNG checks the 8-byte signature and parses the IHDR dimensions —
-// a 24-byte header check, deliberately not a full decode (hardware frames
+// validatePNG checks the signature and parses the IHDR dimensions — a
+// 24-byte header check, deliberately not a full decode (hardware frames
 // are ~11 MB; decoding for validation would be waste).
 func validatePNG(b []byte) error {
 	sig := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
@@ -322,6 +307,11 @@ func validatePNG(b []byte) error {
 	}
 	if !bytes.Equal(b[12:16], []byte("IHDR")) {
 		return fmt.Errorf("first chunk is not IHDR")
+	}
+	w := int(binary.BigEndian.Uint32(b[16:20]))
+	h := int(binary.BigEndian.Uint32(b[20:24]))
+	if w <= 0 || h <= 0 {
+		return fmt.Errorf("IHDR dimensions %dx%d are not positive", w, h)
 	}
 	return nil
 }
@@ -347,13 +337,10 @@ var keyTable = map[string]int{
 }
 
 func knownKeys() string {
-	keys := []string{"UP", "DOWN", "LEFT", "RIGHT", "ENTER", "BACK", "HOME"}
-	out := ""
-	for i, k := range keys {
-		if i > 0 {
-			out += ", "
-		}
-		out += strconv.Quote(k)
+	keys := make([]string, 0, len(keyTable))
+	for k := range keyTable {
+		keys = append(keys, strconv.Quote(k))
 	}
-	return out
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
 }
