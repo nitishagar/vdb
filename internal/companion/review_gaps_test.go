@@ -21,8 +21,10 @@ import (
 )
 
 // Concurrent SendKeys AND Navigate on one target serialize (spec concurrency
-// edge + plan S5 criterion): the fake toolkit's call log must never show
-// more presses between two reads than a single caller issues.
+// edge + plan S5 criterion). Every scripted page keeps focus on `resume`
+// while the Navigate targets `episodes`, so the Navigate leg MUST press at
+// least one key (it can never reach its target) — the test detects a
+// removed input lock, not just busy callers.
 func TestSendKeysAndNavigateSerialize(t *testing.T) {
 	h := newHarness(t)
 	injects := make([]faketoolkit.Step, 32)
@@ -30,9 +32,11 @@ func TestSendKeysAndNavigateSerialize(t *testing.T) {
 		injects[i] = faketoolkit.ObjectStep(nil)
 	}
 	h.tk.Script("injectInputKeyEvent", injects...)
+	// All pages resume-focused: SendKeys focus reads see resume; Navigate
+	// presses toward an unreachable episodes target (trap-terminates).
 	pages := make([]faketoolkit.Step, 64)
 	for i := range pages {
-		pages[i] = faketoolkit.XMLStep(appXMLFocusedEpisodes)
+		pages[i] = faketoolkit.XMLStep(appXMLFocusedResume)
 	}
 	h.tk.Script("getPageSource", pages...)
 
@@ -49,35 +53,54 @@ func TestSendKeysAndNavigateSerialize(t *testing.T) {
 			}
 		}()
 	}
+	navigatePressed := make(chan int, 1)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		stream, err := h.client.Navigate(context.Background(), &vdbv1.NavigateRequest{Udid: serial, Selector: "test_id=episodes"})
 		if err != nil {
 			t.Errorf("Navigate: %v", err)
+			navigatePressed <- 0
 			return
 		}
+		presses := 0
 		for {
 			resp, err := stream.Recv()
 			if err != nil {
 				t.Errorf("navigate stream: %v", err)
-				return
+				break
+			}
+			switch resp.GetUpdate().(type) {
+			case *vdbv1.NavigateResponse_Step:
+				presses++
+			case *vdbv1.NavigateResponse_Reached:
+				t.Error("navigate reached an unreachable target — scripting is wrong")
+			case *vdbv1.NavigateResponse_Failure:
+				// Expected termination (trap/no-progress): the leg pressed.
 			}
 			if resp.GetReached() != nil || resp.GetFailure() != nil {
-				return
+				break
 			}
 		}
+		navigatePressed <- presses
 	}()
 	wg.Wait()
+	close(navigatePressed)
+
+	navPresses := <-navigatePressed
+	if navPresses < 1 {
+		t.Fatal("Navigate leg pressed nothing — the serialization test cannot detect a removed lock")
+	}
 
 	// Serialization model: SendKeys issues 2 presses then 1 read; Navigate
 	// issues 1 press then 1 read per step — all under the target input
 	// lock. Interleaving would produce >2 presses between two reads.
 	calls := h.tk.Calls()
-	injectsSinceRead := 0
+	injectsSinceRead, totalInjects := 0, 0
 	for _, c := range calls {
 		switch c.Method {
 		case "injectInputKeyEvent":
+			totalInjects++
 			injectsSinceRead++
 			if injectsSinceRead > 2 {
 				t.Fatalf("presses interleaved across callers: %s", callSeq(calls))
@@ -85,6 +108,10 @@ func TestSendKeysAndNavigateSerialize(t *testing.T) {
 		case "getPageSource":
 			injectsSinceRead = 0
 		}
+	}
+	// 4 SendKeys presses + >=1 Navigate press must all be accounted for.
+	if want := 4 + navPresses; totalInjects < want {
+		t.Errorf("total injects = %d, want >= %d (Navigate pressed %d)", totalInjects, want, navPresses)
 	}
 }
 

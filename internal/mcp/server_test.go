@@ -32,7 +32,7 @@ func pipeMCP(t *testing.T) (*pipeScanner, *faketoolkit.Server) {
 	t.Setenv("FAKEVDA_TOOLKIT_ADDR", strings.TrimPrefix(tk.URL(), "http://"))
 
 	vegaBin := t.TempDir() + "/vega"
-	if err := ioWrite(vegaBin, "#!/bin/sh\necho ok\n"); err != nil {
+	if err := ioWrite(vegaBin, "#!/bin/sh\nfor i in 1 2 3; do echo \"log$i\"; done\n"); err != nil {
 		t.Fatal(err)
 	}
 	reg := companion.NewRegistry(vda.New(vdaBin), vegacli.New(vegaBin))
@@ -215,13 +215,20 @@ func TestMCPDescribeOutputBounded(t *testing.T) {
 
 func TestMCPLogsTail(t *testing.T) {
 	p, _ := pipeMCP(t)
-	// The fake vega prints 3 lines then dies; logs_tail returns them.
+	// The fake vega prints 3 lines then exits; logs_tail asks for 2 and
+	// must return real lines (or a tool error naming the ended stream —
+	// never empty output and never a protocol crash).
 	res := p.send(`{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"logs_tail","arguments":{"udid":"AFTVTEST001","lines":2}}}`)
 	if res["error"] != nil {
 		t.Fatalf("logs_tail protocol error: %v", res["error"])
 	}
-	// Tool-level error (stream ended early) is acceptable; a crash is not.
-	_, _ = toolTextOK(res)
+	text, ok := toolTextOK(res)
+	if !ok || strings.TrimSpace(text) == "" {
+		t.Fatalf("logs_tail returned no output")
+	}
+	if !strings.Contains(text, "log") && !strings.Contains(text, "stream") {
+		t.Errorf("logs_tail output unexpected: %q", text)
+	}
 }
 
 func toolText(t *testing.T, resp map[string]any) string {
