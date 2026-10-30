@@ -1,0 +1,8 @@
+<root>
+  <app id="com.example.app">
+    <window x="0" y="0" width="1920" height="1080" role="window" id="w">
+      <child x="10" y="10" width="100" height="50" role="button" test_id="a" focusable="true" focused="true"/>
+      <child x="10" y="100" width="100" height="50" role="button" test_id="b" focusable="true" focused="true"/>
+    </window>
+  </app>
+</root>

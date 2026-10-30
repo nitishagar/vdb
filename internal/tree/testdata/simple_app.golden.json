@@ -1,0 +1,94 @@
+{
+  "root": {
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "w": 0,
+      "h": 0
+    },
+    "focusable": false,
+    "focused": false,
+    "enabled": true,
+    "visible": true,
+    "children": [
+      {
+        "id": "com.example.app",
+        "app_id": "com.example.app",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "focusable": false,
+        "focused": false,
+        "enabled": true,
+        "visible": true,
+        "children": [
+          {
+            "id": "main",
+            "role": "window",
+            "app_id": "com.example.app",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "w": 1920,
+              "h": 1080
+            },
+            "focusable": false,
+            "focused": false,
+            "enabled": true,
+            "visible": true,
+            "children": [
+              {
+                "test_id": "hero-button",
+                "role": "button",
+                "app_id": "com.example.app",
+                "rect": {
+                  "x": 100,
+                  "y": 100,
+                  "w": 400,
+                  "h": 80
+                },
+                "focusable": true,
+                "focused": false,
+                "enabled": true,
+                "visible": true
+              },
+              {
+                "test_id": "list-button",
+                "role": "button",
+                "app_id": "com.example.app",
+                "rect": {
+                  "x": 100,
+                  "y": 300,
+                  "w": 400,
+                  "h": 80
+                },
+                "focusable": true,
+                "focused": true,
+                "enabled": true,
+                "visible": true
+              },
+              {
+                "id": "poster-1",
+                "role": "image",
+                "app_id": "com.example.app",
+                "rect": {
+                  "x": 600,
+                  "y": 300,
+                  "w": 300,
+                  "h": 300
+                },
+                "focusable": false,
+                "focused": false,
+                "enabled": true,
+                "visible": true
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "root": {
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "w": 0,
+      "h": 0
+    },
+    "focusable": false,
+    "focused": false,
+    "enabled": true,
+    "visible": true,
+    "children": [
+      {
+        "id": "com.example.app",
+        "app_id": "com.example.app",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "focusable": false,
+        "focused": false,
+        "enabled": true,
+        "visible": true,
+        "children": [
+          {
+            "id": "w",
+            "role": "window",
+            "app_id": "com.example.app",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "w": 1920,
+              "h": 1080
+            },
+            "focusable": false,
+            "focused": false,
+            "enabled": true,
+            "visible": true,
+            "children": [
+              {
+                "test_id": "a",
+                "role": "button",
+                "app_id": "com.example.app",
+                "rect": {
+                  "x": 10,
+                  "y": 10,
+                  "w": 100,
+                  "h": 50
+                },
+                "focusable": true,
+                "focused": true,
+                "enabled": true,
+                "visible": true
+              },
+              {
+                "test_id": "b",
+                "role": "button",
+                "app_id": "com.example.app",
+                "rect": {
+                  "x": 10,
+                  "y": 100,
+                  "w": 100,
+                  "h": 50
+                },
+                "focusable": true,
+                "focused": true,
+                "enabled": true,
+                "visible": true
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "warnings": [
+    "toolkit focus hierarchy may not align with actual focused elements (known toolkit defect) (2 nodes claim focus)"
+  ]
+}

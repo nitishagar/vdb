@@ -1,0 +1,15 @@
+<root>
+  <app id="com.example.app">
+    <window x="0" y="0" width="1920" height="1080" role="window" id="main">
+      <child x="100" y="100" width="400" height="80" role="button" test_id="hero-button" focusable="true" focused="false">
+        <traits><trait visibility="visible" enableable="enabled"/></traits>
+      </child>
+      <child x="100" y="300" width="400" height="80" role="button" test_id="list-button" focusable="true" focused="true">
+        <traits><trait visibility="visible" enableable="enabled"/></traits>
+      </child>
+      <child x="600" y="300" width="300" height="300" role="image" id="poster-1">
+        <traits><trait visibility="visible"/></traits>
+      </child>
+    </window>
+  </app>
+</root>

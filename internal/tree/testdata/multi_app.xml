@@ -1,0 +1,19 @@
+<root>
+  <app id="com.amazon.smplighthouse.launcher">
+    <window x="0" y="0" width="1920" height="1080" role="window" id="launcher-window">
+      <child x="0" y="0" width="1920" height="120" role="menu" test_id="launcher-tiles" focusable="false">
+        <traits><trait visibility="visible"/></traits>
+      </child>
+    </window>
+  </app>
+  <app id="com.example.app">
+    <window x="0" y="120" width="1920" height="960" role="window" id="app-window">
+      <child x="100" y="200" width="500" height="100" role="button" test_id="resume" focusable="true" focused="true">
+        <traits><trait visibility="visible" enableable="enabled"/></traits>
+      </child>
+      <child x="100" y="400" width="500" height="100" role="button" test_id="episodes" focusable="true" focused="false">
+        <traits><trait visibility="visible" enableable="enabled"/></traits>
+      </child>
+    </window>
+  </app>
+</root>
