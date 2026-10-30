@@ -1,0 +1,264 @@
+// vdb companion API — an idb-style gRPC contract for Vega OS devices.
+//
+// Shape informed by Facebook's idb.proto (streaming for indeterminate-length
+// output, client-streamed chunks for large uploads, unary for point reads);
+// all messages and semantics are vdb's own, designed D-pad-first for TV.
+//
+// Conventions:
+//   - Every request names its target by udid (device serial or VVD id).
+//   - Key names use the documented Linux-input table (UP/DOWN/LEFT/RIGHT/
+//     ENTER/BACK/HOME); codes live in the companion, not the wire contract.
+//   - Errors carry gRPC status codes with layer-prefixed messages
+//     (adapter/toolkit/companion), never bare strings.
+
+syntax = "proto3";
+
+package vdb.v1;
+
+option go_package = "github.com/nitishagar/vdb/internal/gen/vdbv1;vdbv1";
+
+// Companion is the per-host daemon service. One companion, N targets.
+service Companion {
+  // Targets.
+  rpc ListTargets(ListTargetsRequest) returns (ListTargetsResponse) {}
+  rpc DescribeTarget(DescribeTargetRequest) returns (DescribeTargetResponse) {}
+
+  // App lifecycle. Already-so outcomes are SUCCESS results
+  // (already-installed / not-running / not-installed), not errors.
+  rpc Install(stream InstallRequest) returns (InstallResponse) {}
+  rpc Uninstall(UninstallRequest) returns (LifecycleResponse) {}
+  rpc Launch(LaunchRequest) returns (LaunchResponse) {}
+  rpc Terminate(TerminateRequest) returns (LifecycleResponse) {}
+  rpc ListApps(ListAppsRequest) returns (ListAppsResponse) {}
+
+  // Input. SendKeys serializes per target; its response carries the
+  // post-action focus so agent loops close in one round-trip.
+  rpc SendKeys(SendKeysRequest) returns (SendKeysResponse) {}
+
+  // UI. DescribeUI returns the normalized tree (JSON) + digest + bounded
+  // summary. Focused is the cheap one-element query.
+  rpc DescribeUI(DescribeUIRequest) returns (DescribeUIResponse) {}
+  rpc Focused(FocusedRequest) returns (FocusedResponse) {}
+
+  // Navigate streams one update per executed step, then the final focus.
+  rpc Navigate(NavigateRequest) returns (stream NavigateResponse) {}
+
+  // Screenshot is a validated capture; oversized payloads error with
+  // RESOURCE_EXHAUSTED rather than truncating.
+  rpc Screenshot(ScreenshotRequest) returns (ScreenshotResponse) {}
+
+  // Log streams device log lines until the client cancels.
+  rpc Log(LogRequest) returns (stream LogResponse) {}
+
+  // Files and shell (host-side paths; the companion runs on the host).
+  rpc Push(PushRequest) returns (PushResponse) {}
+  rpc Pull(PullRequest) returns (PullResponse) {}
+  rpc Shell(ShellRequest) returns (ShellResponse) {}
+
+  // WaitIdle blocks until the tree hash is stable for stable_ms
+  // (poll_ms cadence) or timeout_ms elapses.
+  rpc WaitIdle(WaitIdleRequest) returns (WaitIdleResponse) {}
+}
+
+// --- targets ----------------------------------------------------------------
+
+message Target {
+  string udid = 1;
+  string state = 2; // "attached" | "offline"
+  string kind = 3;  // "device" | "vvd"
+}
+
+message ListTargetsRequest {}
+
+message ListTargetsResponse {
+  repeated Target targets = 1;
+}
+
+message DescribeTargetRequest {
+  string udid = 1;
+}
+
+message DescribeTargetResponse {
+  Target target = 1;
+  string vda_version = 2;
+  bool toolkit_reachable = 3;
+}
+
+// --- lifecycle ---------------------------------------------------------------
+
+message InstallRequest {
+  oneof part {
+    InstallMeta meta = 1;
+    bytes chunk = 2; // .vpkg bytes in order; end of stream completes
+  }
+}
+
+message InstallMeta {
+  string udid = 1;
+  string file_name = 2; // informational (e.g. app.vpkg)
+}
+
+message InstallResponse {
+  string result = 1; // "done" | "already-installed"
+  int64 bytes_received = 2;
+}
+
+message UninstallRequest {
+  string udid = 1;
+  string component_id = 2;
+}
+
+message LifecycleResponse {
+  string result = 1; // "done" | "not-installed" | "not-running" | "terminated"
+}
+
+message LaunchRequest {
+  string udid = 1;
+  string component_id = 2;
+}
+
+message LaunchResponse {}
+
+message TerminateRequest {
+  string udid = 1;
+  string component_id = 2;
+}
+
+message ListAppsRequest {
+  string udid = 1;
+}
+
+message AppInfo {
+  string component_id = 1;
+  string name = 2;
+}
+
+message ListAppsResponse {
+  repeated AppInfo apps = 1;
+}
+
+// --- input -------------------------------------------------------------------
+
+message KeySpec {
+  string name = 1;    // UP/DOWN/LEFT/RIGHT/ENTER/BACK/HOME
+  int32 hold_ms = 2;  // optional hold duration
+  int32 repeat = 3;   // optional press count (default 1)
+}
+
+message SendKeysRequest {
+  string udid = 1;
+  repeated KeySpec keys = 2;
+  bool focus_after = 3; // re-read the tree and return FocusState (default true)
+}
+
+// FocusState is the post-action focus snapshot.
+message FocusState {
+  string focused_id = 1; // selector-ish id ("test_id:x" / "id:y" / role@x,y)
+  string tree_digest = 2;
+}
+
+message SendKeysResponse {
+  FocusState focus = 1;
+}
+
+// --- UI ----------------------------------------------------------------------
+
+message DescribeUIRequest {
+  string udid = 1;
+  string app_id = 2;   // optional: filter the multi-app tree to one app
+  int32 max_nodes = 3; // optional summary cap (default 200)
+}
+
+message DescribeUIResponse {
+  string tree_json = 1;    // normalized tree (tree.Tree JSON)
+  string tree_digest = 2;  // stability hash
+  string summary = 3;      // bounded outline (tree.Summary JSON)
+  repeated string warnings = 4; // surfaced toolkit quirks, never corrected
+}
+
+message FocusedRequest {
+  string udid = 1;
+}
+
+message FocusedResponse {
+  FocusState focus = 1;
+}
+
+message NavigateRequest {
+  string udid = 1;
+  string selector = 2; // "test_id=…" | "id=…" | "role=…" | "text=…"
+  int32 budget = 3;    // optional press bound (default 16, max 64)
+}
+
+message NavigateResponse {
+  oneof update {
+    string step = 1;      // key pressed this step
+    FocusState reached = 2; // final focus on success
+    string failure = 3;   // structured failure reason
+  }
+}
+
+// --- screenshot ---------------------------------------------------------------
+
+message ScreenshotRequest {
+  string udid = 1;
+  bool fresh = 2; // require bytes differing from the previous capture digest
+}
+
+message ScreenshotResponse {
+  bytes png = 1;
+  string digest = 2;
+}
+
+// --- logs ----------------------------------------------------------------------
+
+message LogRequest {
+  string udid = 1;
+}
+
+message LogResponse {
+  string line = 1;
+}
+
+// --- files & shell ---------------------------------------------------------------
+
+message PushRequest {
+  string udid = 1;
+  string local_path = 2;
+  string remote_path = 3;
+}
+
+message PushResponse {}
+
+message PullRequest {
+  string udid = 1;
+  string remote_path = 2;
+  string local_path = 3;
+}
+
+message PullResponse {}
+
+message ShellRequest {
+  string udid = 1;
+  string command = 2;
+}
+
+message ShellResponse {
+  string stdout = 1;
+  string stderr = 2;
+  int32 exit_code = 3;
+}
+
+// --- synchronization ---------------------------------------------------------------
+
+message WaitIdleRequest {
+  string udid = 1;
+  int32 stable_ms = 2; // hash must be unchanged this long (default 500)
+  int32 poll_ms = 3;   // poll cadence (default 200)
+  int32 timeout_ms = 4; // overall deadline (default 10000)
+}
+
+message WaitIdleResponse {
+  bool stable = 1;      // true when stability was reached before timeout
+  string tree_digest = 2; // digest of the stable tree (last-seen if !stable)
+}
