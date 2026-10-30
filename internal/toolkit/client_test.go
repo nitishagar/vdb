@@ -75,6 +75,26 @@ func TestGetWindowRectAndScreenContext(t *testing.T) {
 	}
 }
 
+// IHDR with zero dimensions is invalid (final-review nit coverage).
+func TestScreenshotZeroDimsInvalid(t *testing.T) {
+	zero := append([]byte(nil), faketoolkit.ValidPNG...)
+	for i := 16; i < 24; i++ {
+		zero[i] = 0
+	}
+	srv := faketoolkit.New(t)
+	srv.Script("takeScreenshot",
+		faketoolkit.PNGStep(zero),
+		faketoolkit.PNGStep(faketoolkit.ValidPNG),
+	)
+	c := NewClient(srv.URL())
+	if _, err := c.TakeScreenshot(context.Background()); err != nil {
+		t.Fatalf("zero-dims must retry to success: %v", err)
+	}
+	if n := srv.CallsFor("takeScreenshot"); n != 2 {
+		t.Errorf("attempts = %d, want 2", n)
+	}
+}
+
 func TestRPCErrorTyped(t *testing.T) {
 	srv := faketoolkit.New(t)
 	srv.Script("getPageSource", faketoolkit.ErrorStep(-32601, "method not found"))

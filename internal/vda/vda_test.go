@@ -154,7 +154,7 @@ func TestImplShellAgainstFake(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Shell: %v", err)
 	}
-	if !strings.Contains(out, "fake-shell") || !strings.Contains(out, "echo hi") {
-		t.Errorf("shell output = %q", out)
+	if !strings.Contains(out.Stdout, "fake-shell") || !strings.Contains(out.Stdout, "echo hi") {
+		t.Errorf("shell output = %q", out.Stdout)
 	}
 }

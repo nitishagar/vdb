@@ -160,10 +160,15 @@ func dispatch(ctx context.Context, c vdbv1.CompanionClient, verb *cli.Verb, targ
 	case "shell":
 		err = withArg(args, func(cmd string) error {
 			resp, e := c.Shell(ctx, &vdbv1.ShellRequest{Udid: target, Command: cmd})
-			if e == nil {
-				fmt.Print(string(resp.GetStdout()))
+			if e != nil {
+				return e
 			}
-			return e
+			fmt.Print(string(resp.GetStdout()))
+			fmt.Fprint(os.Stderr, string(resp.GetStderr()))
+			if code := resp.GetExitCode(); code != 0 {
+				return fmt.Errorf("exit %d", code)
+			}
+			return nil
 		})
 	case "push":
 		err = withPaths(args, func(local, remote string) error {

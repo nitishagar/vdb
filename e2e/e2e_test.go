@@ -8,6 +8,7 @@
 package e2e
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
@@ -89,7 +90,8 @@ func TestFullAgentLoop(t *testing.T) {
 		"\"device:install-app\") echo installed; exit 0 ;;\n" +
 		"\"device:launch-app\") echo launched; exit 0 ;;\n" +
 		"\"device:installed-apps\") printf 'com.example.app\\tExample App\\n'; exit 0 ;;\n" +
-		"\"device:start-log-stream\") for i in 1 2 3; do echo \"log$i\"; done; sleep 30 ;;\n" +
+		"\"device:start-log-stream\") for i in 1 2 3; do echo \"log$i\"; done; echo \"stream end\" >&2; exit 1 ;;\n" +
+		"\"device:log-dump\") for i in 1 2 3; do echo \"log$i\"; done; exit 0 ;;\n" +
 		"esac\necho ok; exit 0\n"
 	if err := os.WriteFile(vegaBin, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -156,6 +158,7 @@ func TestFullAgentLoop(t *testing.T) {
 		t.Fatalf("list-targets output missing serial: %q", out)
 	}
 
+	shotPath := filepath.Join(t.TempDir(), "shot.png")
 	steps := []struct {
 		name string
 		args []string
@@ -167,11 +170,10 @@ func TestFullAgentLoop(t *testing.T) {
 		{"describe", []string{"describe"}, "episodes"},
 		{"focused", []string{"focused"}, "test_id:resume"},
 		{"keys", []string{"keys", "DOWN"}, "test_id:episodes"},
-		{"screenshot", []string{"screenshot"}, "digest"},
+		{"screenshot", []string{"screenshot", shotPath}, "digest"},
 		{"wait-idle", []string{"wait-idle", "--stable-ms", "100", "--timeout-ms", "3000"}, "stable=true"},
 	}
-	// Navigate gets a wall-clock budget (hang detection, not a perf SLO).
-	navigateStart := time.Now()
+	loopStart := time.Now()
 	for _, s := range steps {
 		out, err := vdb(s.args...)
 		if err != nil {
@@ -181,15 +183,39 @@ func TestFullAgentLoop(t *testing.T) {
 			t.Fatalf("%s: output %q missing %q", s.name, out, s.want)
 		}
 	}
-	if d := time.Since(navigateStart); d > 5*time.Second {
+	if d := time.Since(loopStart); d > 5*time.Second {
 		t.Errorf("core loop took %v (>5s budget)", d)
 	}
 
+	// Screenshot bytes must round-trip exactly (no truncation end to end).
+	shot, err := os.ReadFile(shotPath)
+	if err != nil {
+		t.Fatalf("read screenshot: %v", err)
+	}
+	if !bytes.Equal(shot, faketoolkit.ValidPNG) {
+		t.Errorf("screenshot bytes differ from the served PNG (%d vs %d bytes)", len(shot), len(faketoolkit.ValidPNG))
+	}
+
+	// Logs: the fake prints three lines then the stream ends (exit 1);
+	// the CLI must stream the lines and terminate (a non-zero exit from a
+	// ended stream is the expected outcome).
+	logsOut, _ := vdb("logs")
+	for _, want := range []string{"log1", "log2", "log3"} {
+		if !strings.Contains(logsOut, want) {
+			t.Fatalf("logs output %q missing %q", logsOut, want)
+		}
+	}
+
+	// Navigate gets its own wall-clock budget (hang detection, not a SLO).
+	navigateStart := time.Now()
 	navigateOut, err := vdb("navigate", "test_id=episodes")
+	if d := time.Since(navigateStart); d > 5*time.Second {
+		t.Errorf("navigate took %v (>5s budget)", d)
+	}
 	if err != nil {
 		t.Fatalf("navigate: %v\n%s", err, navigateOut)
 	}
-	if !strings.Contains(navigateOut, "reached") || time.Since(navigateStart) > 10*time.Second {
+	if !strings.Contains(navigateOut, "reached") {
 		t.Fatalf("navigate output: %q", navigateOut)
 	}
 

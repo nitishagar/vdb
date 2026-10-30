@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -180,16 +181,47 @@ func TestMCPUnknownToolIsProtocolError(t *testing.T) {
 }
 
 func TestMCPDescribeOutputBounded(t *testing.T) {
-	p, _ := pipeMCP(t)
+	p, tk := pipeMCP(t)
+	// A 12-row tree must summarize to <=5 nodes with an explicit truncation
+	// marker (invariant 17 — bounded output, no raw XML).
+	rows := make([]faketoolkit.Step, 4)
+	for i := range rows {
+		var b strings.Builder
+		b.WriteString(`<root><app id="com.example.app"><window x="0" y="0" width="1920" height="1080">`)
+		for r := 0; r < 12; r++ {
+			f := r == 0
+			b.WriteString(`<child x="100" y="` + strconv.Itoa(100+r*100) + `" width="500" height="80" role="row" test_id="row-` + strconv.Itoa(r) + `" focusable="true" focused="` + strconv.FormatBool(f) + `"/>`)
+		}
+		b.WriteString(`</window></app></root>`)
+		rows[i] = faketoolkit.XMLStep(b.String())
+	}
+	tk.Script("getPageSource", rows...)
+
 	res := p.send(`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"describe","arguments":{"udid":"AFTVTEST001","max_nodes":5}}}`)
 	if res["error"] != nil {
 		t.Fatalf("describe error: %v", res["error"])
 	}
-	// Either a bounded summary or a tool error surface — both are fine
-	// depending on fake scripting; assert no raw XML either way.
-	if text, ok := toolTextOK(res); ok && strings.Contains(text, "<root") {
+	text := toolText(t, res)
+	if strings.Contains(text, "<root") {
 		t.Errorf("raw XML leaked: %.80s", text)
 	}
+	if got := strings.Count(text, "row-"); got > 5 {
+		t.Errorf("summary shows %d rows with a 5-node cap:\n%s", got, text)
+	}
+	if !strings.Contains(text, "truncated") {
+		t.Errorf("truncation marker missing:\n%s", text)
+	}
+}
+
+func TestMCPLogsTail(t *testing.T) {
+	p, _ := pipeMCP(t)
+	// The fake vega prints 3 lines then dies; logs_tail returns them.
+	res := p.send(`{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"logs_tail","arguments":{"udid":"AFTVTEST001","lines":2}}}`)
+	if res["error"] != nil {
+		t.Fatalf("logs_tail protocol error: %v", res["error"])
+	}
+	// Tool-level error (stream ended early) is acceptable; a crash is not.
+	_, _ = toolTextOK(res)
 }
 
 func toolText(t *testing.T, resp map[string]any) string {

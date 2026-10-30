@@ -53,8 +53,29 @@ type Session struct {
 	fwd    vda.ForwardHandle
 	client *toolkit.Client
 
+	// shotMu guards lastShotDigest (read/written by concurrent Screenshot
+	// RPCs; a plain field would be a data race).
+	shotMu         sync.Mutex
 	lastShotDigest string
 }
+
+// SetLastShot records the last capture digest (thread-safe).
+func (s *Session) SetLastShot(d string) {
+	s.shotMu.Lock()
+	s.lastShotDigest = d
+	s.shotMu.Unlock()
+}
+
+// LastShot returns the last capture digest (thread-safe).
+func (s *Session) LastShot() string {
+	s.shotMu.Lock()
+	defer s.shotMu.Unlock()
+	return s.lastShotDigest
+}
+
+// maxSessions bounds the per-host session map: an unbounded map keyed by
+// caller-supplied udids would grow without limit.
+const maxSessions = 64
 
 // SessionFor fetches-or-creates the session for a target. An empty udid is
 // rejected; attachment is verified lazily by the first device call.
@@ -72,6 +93,9 @@ func (r *Registry) SessionFor(udid string) (*Session, error) {
 	defer r.mu.Unlock()
 	if s, ok := r.sessions[udid]; ok {
 		return s, nil
+	}
+	if len(r.sessions) >= maxSessions {
+		return nil, fmt.Errorf("companion: session limit reached (%d targets)", maxSessions)
 	}
 	s = &Session{Udid: udid, VDA: r.vda, Vega: r.vega, Toolkit: ToolkitPort()}
 	r.sessions[udid] = s

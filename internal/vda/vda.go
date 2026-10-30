@@ -44,7 +44,7 @@ type VDA interface {
 	Devices(ctx context.Context) ([]Device, error)
 	Version(ctx context.Context) (string, error)
 	Forward(ctx context.Context, serial string, devicePort int) (ForwardHandle, error)
-	Shell(ctx context.Context, serial, command string) (string, error)
+	Shell(ctx context.Context, serial, command string) (ShellResult, error)
 	Push(ctx context.Context, serial, local, remote string) error
 	Pull(ctx context.Context, serial, remote, local string) error
 }
@@ -90,12 +90,24 @@ func (i *Impl) Forward(ctx context.Context, serial string, devicePort int) (Forw
 	return &cmdForward{bin: i.bin, serial: serial, port: port}, nil
 }
 
-func (i *Impl) Shell(ctx context.Context, serial, command string) (string, error) {
+// ShellResult carries the device command's full outcome; a non-zero exit
+// is a RESULT, not an adapter error.
+type ShellResult struct {
+	Stdout   string
+	Stderr   string
+	ExitCode int
+}
+
+func (i *Impl) Shell(ctx context.Context, serial, command string) (ShellResult, error) {
 	res, err := execrun.Run(ctx, i.bin, "-s", serial, "shell", command)
 	if err != nil {
-		return "", fmt.Errorf("vda shell: %w", err)
+		var nz *execrun.ErrNonZero
+		if errors.As(err, &nz) {
+			return ShellResult{Stdout: nz.Stdout, Stderr: nz.Stderr, ExitCode: nz.ExitCode}, nil
+		}
+		return ShellResult{}, fmt.Errorf("vda shell: %w", err)
 	}
-	return res.Stdout, nil
+	return ShellResult{Stdout: res.Stdout}, nil
 }
 
 func (i *Impl) Push(ctx context.Context, serial, local, remote string) error {

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"google.golang.org/grpc/codes"
@@ -156,6 +157,9 @@ func tools() []toolDef {
 	}
 }
 
+// maxLogLines bounds a logs_tail request (allocation guard).
+const maxLogLines = 1000
+
 // textResult builds a successful tool result.
 func textResult(text string) any {
 	return map[string]any{"content": []map[string]any{{"type": "text", "text": text}}}
@@ -274,7 +278,7 @@ func (s *Server) callTool(ctx context.Context, name string, raw json.RawMessage)
 		out := a.str("out")
 		saved := ""
 		if out != "" {
-			if err := writeAll(out, resp.GetPng()); err != nil {
+			if err := writeAll(os.Getenv(EnvVarScreenshotDir), out, resp.GetPng()); err != nil {
 				return errorResult(err.Error()), nil
 			}
 			saved = fmt.Sprintf(" saved to %s", out)
@@ -293,8 +297,10 @@ func (s *Server) callTool(ctx context.Context, name string, raw json.RawMessage)
 		return textResult(fmt.Sprintf("ui %s; tree %s", state, shortDigest(resp.GetTreeDigest()))), nil
 
 	case "logs_tail":
+		// Clamp before allocating: a caller-supplied count must never
+		// drive a huge make() (crash guard).
 		n := a.num("lines")
-		if n <= 0 {
+		if n <= 0 || n > maxLogLines {
 			n = 20
 		}
 		lines, err := s.logsTail(ctx, a.str("udid"), n)

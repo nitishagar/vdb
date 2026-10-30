@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nitishagar/vdb/internal/tree"
 )
@@ -195,7 +196,11 @@ func TestNavigateTrapTerminates(t *testing.T) {
 	}}
 	inj := &recordingInjector{}
 	x := &Executor{Source: src, Keys: inj}
+	start := time.Now()
 	_, err := x.Navigate(context.Background(), Selector{Field: "test_id", Value: "C"})
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("trap took %v — must terminate fast, never loop", d)
+	}
 	if !errors.Is(err, ErrTrap) {
 		t.Fatalf("want ErrTrap, got %v", err)
 	}

@@ -81,6 +81,8 @@ vdb mcp | your-mcp-client
 | `VDB_VDA_PATH` | PATH → `~/vega/sdk/*/bin/tools/vda` | `vda` binary override |
 | `VDB_VEGA_PATH` | PATH → `~/vega/bin/vega` | `vega` binary override |
 | `VDB_TOOLKIT_PORT` | `8383` | on-device automation-toolkit port |
+| `VDB_SCREENSHOT_DIR` | working dir | MCP screenshot output root (writes outside it are rejected) |
+| `VDB_ALLOW_REMOTE` | unset | set `1` to allow a non-loopback companion bind (see security note) |
 
 CLI global flags (`--bind`, `--target`) go directly after the command.
 
@@ -98,6 +100,13 @@ Everything is tested against fakes (`internal/fakevda`,
 screenshots, stale frames, multi-app trees, the focus-alignment defect).
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 [docs/TESTING.md](docs/TESTING.md).
+
+## Security note
+
+The companion is **unauthenticated by design** (like adb/idb on a dev
+machine) and binds loopback only: any local process can drive the device
+and use Push/Pull. Run it on single-user machines. A non-loopback bind is
+refused unless `VDB_ALLOW_REMOTE=1` is set explicitly.
 
 ## Scope and limits
 

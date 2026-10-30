@@ -42,9 +42,34 @@ type Daemon struct {
 	listener net.Listener
 }
 
+// EnvVarAllowRemote explicitly opts into a non-loopback bind. The daemon
+// is unauthenticated and exposes Shell/Push/Pull; the default loopback bind
+// keeps it reachable only by local processes, and widening it is a decision
+// the operator must make out loud.
+const EnvVarAllowRemote = "VDB_ALLOW_REMOTE"
+
+// checkBind enforces the loopback-by-default trust boundary.
+func checkBind(bind string) error {
+	host, _, err := net.SplitHostPort(bind)
+	if err != nil {
+		return fmt.Errorf("companion: bad bind address %q: %w", bind, err)
+	}
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "" {
+		return nil
+	}
+	if os.Getenv(EnvVarAllowRemote) == "1" {
+		fmt.Fprintf(os.Stderr, "companion: WARNING: non-loopback bind %s (VDB_ALLOW_REMOTE=1): any reachable host can drive the device and read/write host files via Push/Pull\n", bind)
+		return nil
+	}
+	return fmt.Errorf("companion: refusing non-loopback bind %s (the daemon is unauthenticated); set %s=1 to accept that risk", bind, EnvVarAllowRemote)
+}
+
 // NewDaemon resolves adapters, builds the registry and service, and binds
 // the listener. Callers must Close.
 func NewDaemon(bind string, cfg Config) (*Daemon, error) {
+	if err := checkBind(bind); err != nil {
+		return nil, err
+	}
 	vdaBin, err := vda.ResolveVDA()
 	if err != nil {
 		return nil, fmt.Errorf("companion: %w", err)

@@ -22,7 +22,7 @@ generate:
 generate-drift:
 	@if [ -f buf.yaml ]; then \
 		PATH="$$HOME/go/bin:$$PATH" buf generate && \
-		git diff --exit-code -- gen/ proto/ || { echo "codegen drift: regenerate and commit (make generate)"; exit 1; }; \
+		git diff --exit-code -- internal/gen/ proto/ || { echo "codegen drift: regenerate and commit (make generate)"; exit 1; }; \
 	else echo "generate-drift: no buf.yaml yet"; fi
 
 e2e:

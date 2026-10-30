@@ -193,6 +193,9 @@ func (svc *Service) Install(stream vdbv1.Companion_InstallServer) error {
 		if werr != nil {
 			return toStatus("companion", werr)
 		}
+		if total > maxInstallBytes {
+			return status.Errorf(codes.ResourceExhausted, "companion: install exceeds %d-byte limit", maxInstallBytes)
+		}
 	}
 	if err := tmp.Close(); err != nil {
 		return toStatus("companion", err)
@@ -259,6 +262,13 @@ func (svc *Service) ListApps(ctx context.Context, req *vdbv1.ListAppsRequest) (*
 	return resp, nil
 }
 
+// maxRepeat bounds one key's press count: an unbounded repeat would hold
+// the target's input lock for ~2^31 presses.
+const maxRepeat = 256
+
+// maxInstallBytes bounds a streamed install (temp-disk exhaustion guard).
+const maxInstallBytes = 2 << 30 // 2 GiB
+
 // --- input --------------------------------------------------------------------
 
 func (svc *Service) SendKeys(ctx context.Context, req *vdbv1.SendKeysRequest) (*vdbv1.SendKeysResponse, error) {
@@ -285,6 +295,9 @@ func (svc *Service) SendKeys(ctx context.Context, req *vdbv1.SendKeysRequest) (*
 		repeat := int(k.GetRepeat())
 		if repeat <= 0 {
 			repeat = 1
+		}
+		if repeat > maxRepeat {
+			return nil, status.Errorf(codes.InvalidArgument, "companion: send-keys: repeat %d exceeds %d", repeat, maxRepeat)
 		}
 		for i := 0; i < repeat; i++ {
 			if err := s.withToolkit(ctx, func(c *toolkit.Client) error {
@@ -515,7 +528,7 @@ func (svc *Service) Screenshot(ctx context.Context, req *vdbv1.ScreenshotRequest
 	var shot toolkit.Screenshot
 	prevDigest := req.GetPrevDigest()
 	if prevDigest == "" {
-		prevDigest = s.lastShotDigest // companion's last capture for this target
+		prevDigest = s.LastShot() // companion's last capture for this target
 	}
 	capture := func(c *toolkit.Client) error {
 		var err error
@@ -534,7 +547,7 @@ func (svc *Service) Screenshot(ctx context.Context, req *vdbv1.ScreenshotRequest
 			"toolkit: screenshot %d bytes exceeds the %d-byte limit (no truncation)",
 			len(shot.PNG), svc.Cfg.maxScreenshot())
 	}
-	s.lastShotDigest = shot.Digest
+	s.SetLastShot(shot.Digest)
 	return &vdbv1.ScreenshotResponse{Png: shot.PNG, Digest: shot.Digest}, nil
 }
 
@@ -601,7 +614,11 @@ func (svc *Service) Shell(ctx context.Context, req *vdbv1.ShellRequest) (*vdbv1.
 	if err != nil {
 		return nil, toStatus("vda", err)
 	}
-	return &vdbv1.ShellResponse{Stdout: []byte(out)}, nil
+	return &vdbv1.ShellResponse{
+		Stdout:   []byte(out.Stdout),
+		Stderr:   []byte(out.Stderr),
+		ExitCode: int32(out.ExitCode),
+	}, nil
 }
 
 // --- wait-idle --------------------------------------------------------------------

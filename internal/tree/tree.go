@@ -57,29 +57,18 @@ func FocusAlignmentWarning() string {
 	return "toolkit focus hierarchy may not align with actual focused elements (known toolkit defect)"
 }
 
-// ParseWarning notes normalization-time anomalies (missing attributes…).
-type ParseWarning struct {
-	Msg string
+// xmlNode is the intermediate parsed node the normalizer consumes.
+type xmlNode struct {
+	XMLName  xml.Name
+	Attrs    []xml.Attr `xml:",any,attr"`
+	Text     string     `xml:",chardata"`
+	Traits   []xmlTrait `xml:"traits"`
+	Children []xmlNode  `xml:",any"`
 }
 
-// Parse decodes toolkit page-source XML. Missing attributes become
-// zero-values with a warning appended; zero-size nodes are preserved
-// (virtualized/offscreen content), not dropped.
-func Parse(pageSourceXML string) (*Tree, error) {
-	var raw xmlNode
-	dec := xml.NewDecoder(strings.NewReader(pageSourceXML))
-	dec.Strict = false
-	if err := dec.Decode(&raw); err != nil {
-		return nil, fmt.Errorf("tree: malformed page source: %w", err)
-	}
-	t := &Tree{}
-	t.Root = raw.toElement(nil, t)
-	// Black-box signal of the documented focus-alignment defect: more than
-	// one node claiming focus. Surfaced, never corrected (invariant 7).
-	if n := countFocused(&t.Root); n > 1 {
-		t.Warnings = append(t.Warnings, FocusAlignmentWarning()+fmt.Sprintf(" (%d nodes claim focus)", n))
-	}
-	return t, nil
+// xmlTrait carries one <trait> element's attributes.
+type xmlTrait struct {
+	Attrs []xml.Attr `xml:",any,attr"`
 }
 
 func countFocused(e *Element) int {
@@ -93,16 +82,112 @@ func countFocused(e *Element) int {
 	return n
 }
 
-type xmlNode struct {
-	XMLName  xml.Name
-	Attrs    []xml.Attr `xml:",any,attr"`
-	Text     string     `xml:",chardata"`
-	Traits   []xmlTrait `xml:"traits"`
-	Children []xmlNode  `xml:",any"`
+// maxDepth bounds XML nesting: a hostile or corrupted page source must not
+// exhaust the goroutine stack, so parsing is token-based with an explicit
+// element stack (no recursion, depth-bounded).
+const maxDepth = 4096
+
+// Parse decodes toolkit page-source XML. Missing attributes become
+// zero-values with a warning appended; zero-size nodes are preserved
+// (virtualized/offscreen content), not dropped.
+func Parse(pageSourceXML string) (*Tree, error) {
+	raw, err := parseTokens(pageSourceXML)
+	if err != nil {
+		return nil, err
+	}
+	t := &Tree{}
+	t.Root = raw.toElement(nil, t)
+	// Black-box signal of the documented focus-alignment defect: more than
+	// one node claiming focus. Surfaced, never corrected (invariant 7).
+	if n := countFocused(&t.Root); n > 1 {
+		t.Warnings = append(t.Warnings, FocusAlignmentWarning()+fmt.Sprintf(" (%d nodes claim focus)", n))
+	}
+	return t, nil
 }
 
-type xmlTrait struct {
-	Attrs []xml.Attr `xml:",any,attr"`
+// bnode is the builder node: children are pointers so later appends never
+// invalidate earlier references.
+type bnode struct {
+	name     xml.Name
+	attrs    []xml.Attr
+	text     strings.Builder
+	traits   []xml.Attr // flattened attrs of <trait> children
+	children []*bnode
+}
+
+// parseTokens builds the tree with an explicit stack. <traits> elements do
+// not become nodes: their <trait> children's attributes attach to the
+// owning element (matching the toolkit schema).
+func parseTokens(src string) (*xmlNode, error) {
+	dec := xml.NewDecoder(strings.NewReader(src))
+	dec.Strict = false
+	var root *bnode
+	var stack []*bnode
+	var traitsOwner *bnode
+
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("tree: malformed page source: %w", err)
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if len(stack) >= maxDepth {
+				return nil, fmt.Errorf("tree: page source exceeds %d nesting levels", maxDepth)
+			}
+			switch {
+			case t.Name.Local == "traits" && len(stack) > 0:
+				traitsOwner = stack[len(stack)-1]
+			case t.Name.Local == "trait" && traitsOwner != nil:
+				traitsOwner.traits = append(traitsOwner.traits, t.Attr...)
+			default:
+				n := &bnode{name: t.Name, attrs: t.Attr}
+				if root == nil {
+					root = n
+				} else if len(stack) > 0 {
+					parent := stack[len(stack)-1]
+					parent.children = append(parent.children, n)
+				}
+				stack = append(stack, n)
+			}
+		case xml.CharData:
+			if len(stack) > 0 {
+				stack[len(stack)-1].text.Write(t)
+			}
+		case xml.EndElement:
+			switch t.Name.Local {
+			case "traits":
+				traitsOwner = nil
+			case "trait":
+				// trait never pushed the stack
+			default:
+				if len(stack) > 0 {
+					stack = stack[:len(stack)-1]
+				}
+			}
+		}
+	}
+	if root == nil {
+		return nil, fmt.Errorf("tree: empty page source")
+	}
+	out := buildXMLNode(root)
+	return &out, nil
+}
+
+// buildXMLNode converts the pointer builder tree to the value xmlNode tree
+// (recursion bounded by maxDepth).
+func buildXMLNode(b *bnode) xmlNode {
+	n := xmlNode{XMLName: b.name, Attrs: b.attrs, Text: b.text.String()}
+	for _, tr := range b.traits {
+		n.Traits = append(n.Traits, xmlTrait{Attrs: []xml.Attr{tr}})
+	}
+	for _, c := range b.children {
+		n.Children = append(n.Children, buildXMLNode(c))
+	}
+	return n
 }
 
 func (n *xmlNode) attr(name string) (string, bool) {
@@ -168,7 +253,7 @@ func (n *xmlNode) toElement(appID *string, t *Tree) Element {
 	if v, ok := n.attr("focused"); ok {
 		e.Focused = v == "true" || v == "1"
 	}
-	// Traits refine visibility/enablement.
+	// Traits refine visibility/enablement (one entry per trait attribute).
 	for _, tr := range n.Traits {
 		for _, a := range tr.Attrs {
 			switch a.Name.Local {

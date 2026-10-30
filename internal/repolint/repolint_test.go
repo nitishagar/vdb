@@ -38,6 +38,37 @@ func TestRepoLintPassesOnRealRepo(t *testing.T) {
 	}
 }
 
+// The bundled-binary clause fails on a tracked >1 MiB blob.
+func TestRepoLintFailsOnBundledBlob(t *testing.T) {
+	dir := t.TempDir()
+	git := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	git("init", "-q", "-b", "main")
+	git("config", "user.email", "t@t")
+	git("config", "user.name", "t")
+	script := "cd " + dir + " && mkdir -p thoughts && echo x > thoughts/l.md && " +
+		"printf 'This is Apache License Version 2.0, January 2004\n' > LICENSE && " +
+		"echo 'not affiliated with Amazon' > README.md && printf 'dist/\n' > .gitignore && " +
+		"dd if=/dev/zero of=blob.bin bs=1M count=2 status=none && " +
+		"printf 'blob.bin diff=lfs\n' > .gitattributes && " +
+		"git add -A && git commit -qm x"
+	if err := exec.Command("bash", "-c", script).Run(); err != nil {
+		t.Skipf("fixture setup failed: %v", err)
+	}
+	out, ok := runScript(t, dir)
+	if ok {
+		t.Fatalf("repo-lint must fail on a 2 MiB tracked blob, passed:\n%s", out)
+	}
+	if !strings.Contains(out, "1 MiB") && !strings.Contains(out, "MiB") {
+		t.Errorf("output should name the blob rule:\n%s", out)
+	}
+}
+
 // Violations must fail loudly: a git repo missing LICENSE + disclaimer and
 // tracking thoughts/ fails every clause it violates.
 func TestRepoLintFailsOnViolations(t *testing.T) {
