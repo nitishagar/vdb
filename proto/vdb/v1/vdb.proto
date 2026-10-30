@@ -15,7 +15,7 @@ syntax = "proto3";
 
 package vdb.v1;
 
-option go_package = "github.com/nitishagar/vdb/internal/gen/vdbv1;vdbv1";
+option go_package = "github.com/nitishagar/vdb/internal/gen/vdb/v1;vdbv1";
 
 // Companion is the per-host daemon service. One companion, N targets.
 service Companion {
@@ -43,8 +43,9 @@ service Companion {
   // Navigate streams one update per executed step, then the final focus.
   rpc Navigate(NavigateRequest) returns (stream NavigateResponse) {}
 
-  // Screenshot is a validated capture; oversized payloads error with
-  // RESOURCE_EXHAUSTED rather than truncating.
+  // Screenshot is a validated capture; payloads above the companion's
+  // explicit limit (64 MiB by default) error with RESOURCE_EXHAUSTED
+  // rather than truncating.
   rpc Screenshot(ScreenshotRequest) returns (ScreenshotResponse) {}
 
   // Log streams device log lines until the client cancels.
@@ -56,7 +57,9 @@ service Companion {
   rpc Shell(ShellRequest) returns (ShellResponse) {}
 
   // WaitIdle blocks until the tree hash is stable for stable_ms
-  // (poll_ms cadence) or timeout_ms elapses.
+  // (poll_ms cadence) or timeout_ms elapses. A timeout is a SUCCESS-shaped
+  // response with stable=false (not an error); errors are reserved for
+  // transport failure and caller cancellation.
   rpc WaitIdle(WaitIdleRequest) returns (WaitIdleResponse) {}
 }
 
@@ -148,7 +151,8 @@ message KeySpec {
 message SendKeysRequest {
   string udid = 1;
   repeated KeySpec keys = 2;
-  bool focus_after = 3; // re-read the tree and return FocusState (default true)
+  bool focus_after = 3; // when true, re-read the tree and return FocusState
+                        // (proto3 default false — set it explicitly)
 }
 
 // FocusState is the post-action focus snapshot.
@@ -192,17 +196,35 @@ message NavigateRequest {
 
 message NavigateResponse {
   oneof update {
-    string step = 1;      // key pressed this step
+    string step = 1;        // key pressed this step
     FocusState reached = 2; // final focus on success
-    string failure = 3;   // structured failure reason
+    NavigateFailure failure = 3; // typed termination with diagnostics
   }
+}
+
+// NavigateFailure carries the structured termination reason plus the
+// last-observed focus, so agents can diagnose without another round-trip.
+message NavigateFailure {
+  enum Reason {
+    REASON_UNSPECIFIED = 0;
+    BUDGET_EXCEEDED = 1;
+    NO_PROGRESS = 2;
+    TRAP = 3;
+    TARGET_NOT_FOUND = 4;
+    INTERNAL = 5;
+  }
+  Reason reason = 1;
+  string detail = 2;      // human-readable detail (step counts, ids)
+  FocusState focus = 3;   // last-observed focus (may be empty)
 }
 
 // --- screenshot ---------------------------------------------------------------
 
 message ScreenshotRequest {
   string udid = 1;
-  bool fresh = 2; // require bytes differing from the previous capture digest
+  bool fresh = 2;       // require bytes differing from prev_digest
+  string prev_digest = 3; // caller's previous capture digest; empty = use
+                        // the companion's last capture for this target
 }
 
 message ScreenshotResponse {
@@ -217,7 +239,7 @@ message LogRequest {
 }
 
 message LogResponse {
-  string line = 1;
+  bytes line = 1; // bytes: device log output is not guaranteed UTF-8
 }
 
 // --- files & shell ---------------------------------------------------------------
@@ -244,8 +266,8 @@ message ShellRequest {
 }
 
 message ShellResponse {
-  string stdout = 1;
-  string stderr = 2;
+  bytes stdout = 1; // bytes: device output is not guaranteed UTF-8
+  bytes stderr = 2;
   int32 exit_code = 3;
 }
 
@@ -253,9 +275,9 @@ message ShellResponse {
 
 message WaitIdleRequest {
   string udid = 1;
-  int32 stable_ms = 2; // hash must be unchanged this long (default 500)
-  int32 poll_ms = 3;   // poll cadence (default 200)
-  int32 timeout_ms = 4; // overall deadline (default 10000)
+  int32 stable_ms = 2;  // hash must be unchanged this long; 0 = default 500
+  int32 poll_ms = 3;    // poll cadence; 0 = default 200
+  int32 timeout_ms = 4; // overall deadline; 0 = default 10000
 }
 
 message WaitIdleResponse {

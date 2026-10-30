@@ -34,6 +34,64 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type NavigateFailure_Reason int32
+
+const (
+	NavigateFailure_REASON_UNSPECIFIED NavigateFailure_Reason = 0
+	NavigateFailure_BUDGET_EXCEEDED    NavigateFailure_Reason = 1
+	NavigateFailure_NO_PROGRESS        NavigateFailure_Reason = 2
+	NavigateFailure_TRAP               NavigateFailure_Reason = 3
+	NavigateFailure_TARGET_NOT_FOUND   NavigateFailure_Reason = 4
+	NavigateFailure_INTERNAL           NavigateFailure_Reason = 5
+)
+
+// Enum value maps for NavigateFailure_Reason.
+var (
+	NavigateFailure_Reason_name = map[int32]string{
+		0: "REASON_UNSPECIFIED",
+		1: "BUDGET_EXCEEDED",
+		2: "NO_PROGRESS",
+		3: "TRAP",
+		4: "TARGET_NOT_FOUND",
+		5: "INTERNAL",
+	}
+	NavigateFailure_Reason_value = map[string]int32{
+		"REASON_UNSPECIFIED": 0,
+		"BUDGET_EXCEEDED":    1,
+		"NO_PROGRESS":        2,
+		"TRAP":               3,
+		"TARGET_NOT_FOUND":   4,
+		"INTERNAL":           5,
+	}
+)
+
+func (x NavigateFailure_Reason) Enum() *NavigateFailure_Reason {
+	p := new(NavigateFailure_Reason)
+	*p = x
+	return p
+}
+
+func (x NavigateFailure_Reason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (NavigateFailure_Reason) Descriptor() protoreflect.EnumDescriptor {
+	return file_vdb_v1_vdb_proto_enumTypes[0].Descriptor()
+}
+
+func (NavigateFailure_Reason) Type() protoreflect.EnumType {
+	return &file_vdb_v1_vdb_proto_enumTypes[0]
+}
+
+func (x NavigateFailure_Reason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NavigateFailure_Reason.Descriptor instead.
+func (NavigateFailure_Reason) EnumDescriptor() ([]byte, []int) {
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{26, 0}
+}
+
 type Target struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Udid          string                 `protobuf:"bytes,1,opt,name=udid,proto3" json:"udid,omitempty"`
@@ -904,7 +962,7 @@ type SendKeysRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Udid          string                 `protobuf:"bytes,1,opt,name=udid,proto3" json:"udid,omitempty"`
 	Keys          []*KeySpec             `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty"`
-	FocusAfter    bool                   `protobuf:"varint,3,opt,name=focus_after,json=focusAfter,proto3" json:"focus_after,omitempty"` // re-read the tree and return FocusState (default true)
+	FocusAfter    bool                   `protobuf:"varint,3,opt,name=focus_after,json=focusAfter,proto3" json:"focus_after,omitempty"` // when true, re-read the tree and return FocusState
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1400,13 +1458,13 @@ func (x *NavigateResponse) GetReached() *FocusState {
 	return nil
 }
 
-func (x *NavigateResponse) GetFailure() string {
+func (x *NavigateResponse) GetFailure() *NavigateFailure {
 	if x != nil {
 		if x, ok := x.Update.(*NavigateResponse_Failure); ok {
 			return x.Failure
 		}
 	}
-	return ""
+	return nil
 }
 
 type isNavigateResponse_Update interface {
@@ -1422,7 +1480,7 @@ type NavigateResponse_Reached struct {
 }
 
 type NavigateResponse_Failure struct {
-	Failure string `protobuf:"bytes,3,opt,name=failure,proto3,oneof"` // structured failure reason
+	Failure *NavigateFailure `protobuf:"bytes,3,opt,name=failure,proto3,oneof"` // typed termination with diagnostics
 }
 
 func (*NavigateResponse_Step) isNavigateResponse_Update() {}
@@ -1431,17 +1489,80 @@ func (*NavigateResponse_Reached) isNavigateResponse_Update() {}
 
 func (*NavigateResponse_Failure) isNavigateResponse_Update() {}
 
+// NavigateFailure carries the structured termination reason plus the
+// last-observed focus, so agents can diagnose without another round-trip.
+type NavigateFailure struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Reason        NavigateFailure_Reason `protobuf:"varint,1,opt,name=reason,proto3,enum=vdb.v1.NavigateFailure_Reason" json:"reason,omitempty"`
+	Detail        string                 `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"` // human-readable detail (step counts, ids)
+	Focus         *FocusState            `protobuf:"bytes,3,opt,name=focus,proto3" json:"focus,omitempty"`   // last-observed focus (may be empty)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NavigateFailure) Reset() {
+	*x = NavigateFailure{}
+	mi := &file_vdb_v1_vdb_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NavigateFailure) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NavigateFailure) ProtoMessage() {}
+
+func (x *NavigateFailure) ProtoReflect() protoreflect.Message {
+	mi := &file_vdb_v1_vdb_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NavigateFailure.ProtoReflect.Descriptor instead.
+func (*NavigateFailure) Descriptor() ([]byte, []int) {
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *NavigateFailure) GetReason() NavigateFailure_Reason {
+	if x != nil {
+		return x.Reason
+	}
+	return NavigateFailure_REASON_UNSPECIFIED
+}
+
+func (x *NavigateFailure) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *NavigateFailure) GetFocus() *FocusState {
+	if x != nil {
+		return x.Focus
+	}
+	return nil
+}
+
 type ScreenshotRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Udid          string                 `protobuf:"bytes,1,opt,name=udid,proto3" json:"udid,omitempty"`
-	Fresh         bool                   `protobuf:"varint,2,opt,name=fresh,proto3" json:"fresh,omitempty"` // require bytes differing from the previous capture digest
+	Fresh         bool                   `protobuf:"varint,2,opt,name=fresh,proto3" json:"fresh,omitempty"`                            // require bytes differing from prev_digest
+	PrevDigest    string                 `protobuf:"bytes,3,opt,name=prev_digest,json=prevDigest,proto3" json:"prev_digest,omitempty"` // caller's previous capture digest; empty = use
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ScreenshotRequest) Reset() {
 	*x = ScreenshotRequest{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[26]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1453,7 +1574,7 @@ func (x *ScreenshotRequest) String() string {
 func (*ScreenshotRequest) ProtoMessage() {}
 
 func (x *ScreenshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[26]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1466,7 +1587,7 @@ func (x *ScreenshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScreenshotRequest.ProtoReflect.Descriptor instead.
 func (*ScreenshotRequest) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{26}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ScreenshotRequest) GetUdid() string {
@@ -1483,6 +1604,13 @@ func (x *ScreenshotRequest) GetFresh() bool {
 	return false
 }
 
+func (x *ScreenshotRequest) GetPrevDigest() string {
+	if x != nil {
+		return x.PrevDigest
+	}
+	return ""
+}
+
 type ScreenshotResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Png           []byte                 `protobuf:"bytes,1,opt,name=png,proto3" json:"png,omitempty"`
@@ -1493,7 +1621,7 @@ type ScreenshotResponse struct {
 
 func (x *ScreenshotResponse) Reset() {
 	*x = ScreenshotResponse{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[27]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1505,7 +1633,7 @@ func (x *ScreenshotResponse) String() string {
 func (*ScreenshotResponse) ProtoMessage() {}
 
 func (x *ScreenshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[27]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1518,7 +1646,7 @@ func (x *ScreenshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScreenshotResponse.ProtoReflect.Descriptor instead.
 func (*ScreenshotResponse) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{27}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ScreenshotResponse) GetPng() []byte {
@@ -1544,7 +1672,7 @@ type LogRequest struct {
 
 func (x *LogRequest) Reset() {
 	*x = LogRequest{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[28]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1556,7 +1684,7 @@ func (x *LogRequest) String() string {
 func (*LogRequest) ProtoMessage() {}
 
 func (x *LogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[28]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1569,7 +1697,7 @@ func (x *LogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogRequest.ProtoReflect.Descriptor instead.
 func (*LogRequest) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{28}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *LogRequest) GetUdid() string {
@@ -1581,14 +1709,14 @@ func (x *LogRequest) GetUdid() string {
 
 type LogResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Line          string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	Line          []byte                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"` // bytes: device log output is not guaranteed UTF-8
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LogResponse) Reset() {
 	*x = LogResponse{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[29]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1600,7 +1728,7 @@ func (x *LogResponse) String() string {
 func (*LogResponse) ProtoMessage() {}
 
 func (x *LogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[29]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1613,14 +1741,14 @@ func (x *LogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogResponse.ProtoReflect.Descriptor instead.
 func (*LogResponse) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{29}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{30}
 }
 
-func (x *LogResponse) GetLine() string {
+func (x *LogResponse) GetLine() []byte {
 	if x != nil {
 		return x.Line
 	}
-	return ""
+	return nil
 }
 
 type PushRequest struct {
@@ -1634,7 +1762,7 @@ type PushRequest struct {
 
 func (x *PushRequest) Reset() {
 	*x = PushRequest{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[30]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1646,7 +1774,7 @@ func (x *PushRequest) String() string {
 func (*PushRequest) ProtoMessage() {}
 
 func (x *PushRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[30]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1659,7 +1787,7 @@ func (x *PushRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushRequest.ProtoReflect.Descriptor instead.
 func (*PushRequest) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{30}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *PushRequest) GetUdid() string {
@@ -1691,7 +1819,7 @@ type PushResponse struct {
 
 func (x *PushResponse) Reset() {
 	*x = PushResponse{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[31]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1703,7 +1831,7 @@ func (x *PushResponse) String() string {
 func (*PushResponse) ProtoMessage() {}
 
 func (x *PushResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[31]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1716,7 +1844,7 @@ func (x *PushResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushResponse.ProtoReflect.Descriptor instead.
 func (*PushResponse) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{31}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{32}
 }
 
 type PullRequest struct {
@@ -1730,7 +1858,7 @@ type PullRequest struct {
 
 func (x *PullRequest) Reset() {
 	*x = PullRequest{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[32]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1742,7 +1870,7 @@ func (x *PullRequest) String() string {
 func (*PullRequest) ProtoMessage() {}
 
 func (x *PullRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[32]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1755,7 +1883,7 @@ func (x *PullRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullRequest.ProtoReflect.Descriptor instead.
 func (*PullRequest) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{32}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *PullRequest) GetUdid() string {
@@ -1787,7 +1915,7 @@ type PullResponse struct {
 
 func (x *PullResponse) Reset() {
 	*x = PullResponse{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[33]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1799,7 +1927,7 @@ func (x *PullResponse) String() string {
 func (*PullResponse) ProtoMessage() {}
 
 func (x *PullResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[33]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1812,7 +1940,7 @@ func (x *PullResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullResponse.ProtoReflect.Descriptor instead.
 func (*PullResponse) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{33}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{34}
 }
 
 type ShellRequest struct {
@@ -1825,7 +1953,7 @@ type ShellRequest struct {
 
 func (x *ShellRequest) Reset() {
 	*x = ShellRequest{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[34]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1837,7 +1965,7 @@ func (x *ShellRequest) String() string {
 func (*ShellRequest) ProtoMessage() {}
 
 func (x *ShellRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[34]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1850,7 +1978,7 @@ func (x *ShellRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShellRequest.ProtoReflect.Descriptor instead.
 func (*ShellRequest) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{34}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ShellRequest) GetUdid() string {
@@ -1869,8 +1997,8 @@ func (x *ShellRequest) GetCommand() string {
 
 type ShellResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Stdout        string                 `protobuf:"bytes,1,opt,name=stdout,proto3" json:"stdout,omitempty"`
-	Stderr        string                 `protobuf:"bytes,2,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	Stdout        []byte                 `protobuf:"bytes,1,opt,name=stdout,proto3" json:"stdout,omitempty"` // bytes: device output is not guaranteed UTF-8
+	Stderr        []byte                 `protobuf:"bytes,2,opt,name=stderr,proto3" json:"stderr,omitempty"`
 	ExitCode      int32                  `protobuf:"varint,3,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1878,7 +2006,7 @@ type ShellResponse struct {
 
 func (x *ShellResponse) Reset() {
 	*x = ShellResponse{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[35]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1890,7 +2018,7 @@ func (x *ShellResponse) String() string {
 func (*ShellResponse) ProtoMessage() {}
 
 func (x *ShellResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[35]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1903,21 +2031,21 @@ func (x *ShellResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShellResponse.ProtoReflect.Descriptor instead.
 func (*ShellResponse) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{35}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{36}
 }
 
-func (x *ShellResponse) GetStdout() string {
+func (x *ShellResponse) GetStdout() []byte {
 	if x != nil {
 		return x.Stdout
 	}
-	return ""
+	return nil
 }
 
-func (x *ShellResponse) GetStderr() string {
+func (x *ShellResponse) GetStderr() []byte {
 	if x != nil {
 		return x.Stderr
 	}
-	return ""
+	return nil
 }
 
 func (x *ShellResponse) GetExitCode() int32 {
@@ -1930,16 +2058,16 @@ func (x *ShellResponse) GetExitCode() int32 {
 type WaitIdleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Udid          string                 `protobuf:"bytes,1,opt,name=udid,proto3" json:"udid,omitempty"`
-	StableMs      int32                  `protobuf:"varint,2,opt,name=stable_ms,json=stableMs,proto3" json:"stable_ms,omitempty"`    // hash must be unchanged this long (default 500)
-	PollMs        int32                  `protobuf:"varint,3,opt,name=poll_ms,json=pollMs,proto3" json:"poll_ms,omitempty"`          // poll cadence (default 200)
-	TimeoutMs     int32                  `protobuf:"varint,4,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"` // overall deadline (default 10000)
+	StableMs      int32                  `protobuf:"varint,2,opt,name=stable_ms,json=stableMs,proto3" json:"stable_ms,omitempty"`    // hash must be unchanged this long; 0 = default 500
+	PollMs        int32                  `protobuf:"varint,3,opt,name=poll_ms,json=pollMs,proto3" json:"poll_ms,omitempty"`          // poll cadence; 0 = default 200
+	TimeoutMs     int32                  `protobuf:"varint,4,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"` // overall deadline; 0 = default 10000
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WaitIdleRequest) Reset() {
 	*x = WaitIdleRequest{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[36]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1951,7 +2079,7 @@ func (x *WaitIdleRequest) String() string {
 func (*WaitIdleRequest) ProtoMessage() {}
 
 func (x *WaitIdleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[36]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1964,7 +2092,7 @@ func (x *WaitIdleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitIdleRequest.ProtoReflect.Descriptor instead.
 func (*WaitIdleRequest) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{36}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *WaitIdleRequest) GetUdid() string {
@@ -2005,7 +2133,7 @@ type WaitIdleResponse struct {
 
 func (x *WaitIdleResponse) Reset() {
 	*x = WaitIdleResponse{}
-	mi := &file_vdb_v1_vdb_proto_msgTypes[37]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2017,7 +2145,7 @@ func (x *WaitIdleResponse) String() string {
 func (*WaitIdleResponse) ProtoMessage() {}
 
 func (x *WaitIdleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vdb_v1_vdb_proto_msgTypes[37]
+	mi := &file_vdb_v1_vdb_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2030,7 +2158,7 @@ func (x *WaitIdleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitIdleResponse.ProtoReflect.Descriptor instead.
 func (*WaitIdleResponse) Descriptor() ([]byte, []int) {
-	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{37}
+	return file_vdb_v1_vdb_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *WaitIdleResponse) GetStable() bool {
@@ -2129,15 +2257,28 @@ const file_vdb_v1_vdb_proto_rawDesc = "" +
 	"\x0fNavigateRequest\x12\x12\n" +
 	"\x04udid\x18\x01 \x01(\tR\x04udid\x12\x1a\n" +
 	"\bselector\x18\x02 \x01(\tR\bselector\x12\x16\n" +
-	"\x06budget\x18\x03 \x01(\x05R\x06budget\"~\n" +
+	"\x06budget\x18\x03 \x01(\x05R\x06budget\"\x97\x01\n" +
 	"\x10NavigateResponse\x12\x14\n" +
 	"\x04step\x18\x01 \x01(\tH\x00R\x04step\x12.\n" +
-	"\areached\x18\x02 \x01(\v2\x12.vdb.v1.FocusStateH\x00R\areached\x12\x1a\n" +
-	"\afailure\x18\x03 \x01(\tH\x00R\afailureB\b\n" +
-	"\x06update\"=\n" +
+	"\areached\x18\x02 \x01(\v2\x12.vdb.v1.FocusStateH\x00R\areached\x123\n" +
+	"\afailure\x18\x03 \x01(\v2\x17.vdb.v1.NavigateFailureH\x00R\afailureB\b\n" +
+	"\x06update\"\x81\x02\n" +
+	"\x0fNavigateFailure\x126\n" +
+	"\x06reason\x18\x01 \x01(\x0e2\x1e.vdb.v1.NavigateFailure.ReasonR\x06reason\x12\x16\n" +
+	"\x06detail\x18\x02 \x01(\tR\x06detail\x12(\n" +
+	"\x05focus\x18\x03 \x01(\v2\x12.vdb.v1.FocusStateR\x05focus\"t\n" +
+	"\x06Reason\x12\x16\n" +
+	"\x12REASON_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fBUDGET_EXCEEDED\x10\x01\x12\x0f\n" +
+	"\vNO_PROGRESS\x10\x02\x12\b\n" +
+	"\x04TRAP\x10\x03\x12\x14\n" +
+	"\x10TARGET_NOT_FOUND\x10\x04\x12\f\n" +
+	"\bINTERNAL\x10\x05\"^\n" +
 	"\x11ScreenshotRequest\x12\x12\n" +
 	"\x04udid\x18\x01 \x01(\tR\x04udid\x12\x14\n" +
-	"\x05fresh\x18\x02 \x01(\bR\x05fresh\">\n" +
+	"\x05fresh\x18\x02 \x01(\bR\x05fresh\x12\x1f\n" +
+	"\vprev_digest\x18\x03 \x01(\tR\n" +
+	"prevDigest\">\n" +
 	"\x12ScreenshotResponse\x12\x10\n" +
 	"\x03png\x18\x01 \x01(\fR\x03png\x12\x16\n" +
 	"\x06digest\x18\x02 \x01(\tR\x06digest\" \n" +
@@ -2145,7 +2286,7 @@ const file_vdb_v1_vdb_proto_rawDesc = "" +
 	"LogRequest\x12\x12\n" +
 	"\x04udid\x18\x01 \x01(\tR\x04udid\"!\n" +
 	"\vLogResponse\x12\x12\n" +
-	"\x04line\x18\x01 \x01(\tR\x04line\"a\n" +
+	"\x04line\x18\x01 \x01(\fR\x04line\"a\n" +
 	"\vPushRequest\x12\x12\n" +
 	"\x04udid\x18\x01 \x01(\tR\x04udid\x12\x1d\n" +
 	"\n" +
@@ -2164,8 +2305,8 @@ const file_vdb_v1_vdb_proto_rawDesc = "" +
 	"\x04udid\x18\x01 \x01(\tR\x04udid\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\"\\\n" +
 	"\rShellResponse\x12\x16\n" +
-	"\x06stdout\x18\x01 \x01(\tR\x06stdout\x12\x16\n" +
-	"\x06stderr\x18\x02 \x01(\tR\x06stderr\x12\x1b\n" +
+	"\x06stdout\x18\x01 \x01(\fR\x06stdout\x12\x16\n" +
+	"\x06stderr\x18\x02 \x01(\fR\x06stderr\x12\x1b\n" +
 	"\texit_code\x18\x03 \x01(\x05R\bexitCode\"z\n" +
 	"\x0fWaitIdleRequest\x12\x12\n" +
 	"\x04udid\x18\x01 \x01(\tR\x04udid\x12\x1b\n" +
@@ -2196,7 +2337,7 @@ const file_vdb_v1_vdb_proto_rawDesc = "" +
 	"\x04Push\x12\x13.vdb.v1.PushRequest\x1a\x14.vdb.v1.PushResponse\"\x00\x123\n" +
 	"\x04Pull\x12\x13.vdb.v1.PullRequest\x1a\x14.vdb.v1.PullResponse\"\x00\x126\n" +
 	"\x05Shell\x12\x14.vdb.v1.ShellRequest\x1a\x15.vdb.v1.ShellResponse\"\x00\x12?\n" +
-	"\bWaitIdle\x12\x17.vdb.v1.WaitIdleRequest\x1a\x18.vdb.v1.WaitIdleResponse\"\x00B4Z2github.com/nitishagar/vdb/internal/gen/vdbv1;vdbv1b\x06proto3"
+	"\bWaitIdle\x12\x17.vdb.v1.WaitIdleRequest\x1a\x18.vdb.v1.WaitIdleResponse\"\x00B5Z3github.com/nitishagar/vdb/internal/gen/vdb/v1;vdbv1b\x06proto3"
 
 var (
 	file_vdb_v1_vdb_proto_rawDescOnce sync.Once
@@ -2210,95 +2351,101 @@ func file_vdb_v1_vdb_proto_rawDescGZIP() []byte {
 	return file_vdb_v1_vdb_proto_rawDescData
 }
 
-var file_vdb_v1_vdb_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_vdb_v1_vdb_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_vdb_v1_vdb_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_vdb_v1_vdb_proto_goTypes = []any{
-	(*Target)(nil),                 // 0: vdb.v1.Target
-	(*ListTargetsRequest)(nil),     // 1: vdb.v1.ListTargetsRequest
-	(*ListTargetsResponse)(nil),    // 2: vdb.v1.ListTargetsResponse
-	(*DescribeTargetRequest)(nil),  // 3: vdb.v1.DescribeTargetRequest
-	(*DescribeTargetResponse)(nil), // 4: vdb.v1.DescribeTargetResponse
-	(*InstallRequest)(nil),         // 5: vdb.v1.InstallRequest
-	(*InstallMeta)(nil),            // 6: vdb.v1.InstallMeta
-	(*InstallResponse)(nil),        // 7: vdb.v1.InstallResponse
-	(*UninstallRequest)(nil),       // 8: vdb.v1.UninstallRequest
-	(*LifecycleResponse)(nil),      // 9: vdb.v1.LifecycleResponse
-	(*LaunchRequest)(nil),          // 10: vdb.v1.LaunchRequest
-	(*LaunchResponse)(nil),         // 11: vdb.v1.LaunchResponse
-	(*TerminateRequest)(nil),       // 12: vdb.v1.TerminateRequest
-	(*ListAppsRequest)(nil),        // 13: vdb.v1.ListAppsRequest
-	(*AppInfo)(nil),                // 14: vdb.v1.AppInfo
-	(*ListAppsResponse)(nil),       // 15: vdb.v1.ListAppsResponse
-	(*KeySpec)(nil),                // 16: vdb.v1.KeySpec
-	(*SendKeysRequest)(nil),        // 17: vdb.v1.SendKeysRequest
-	(*FocusState)(nil),             // 18: vdb.v1.FocusState
-	(*SendKeysResponse)(nil),       // 19: vdb.v1.SendKeysResponse
-	(*DescribeUIRequest)(nil),      // 20: vdb.v1.DescribeUIRequest
-	(*DescribeUIResponse)(nil),     // 21: vdb.v1.DescribeUIResponse
-	(*FocusedRequest)(nil),         // 22: vdb.v1.FocusedRequest
-	(*FocusedResponse)(nil),        // 23: vdb.v1.FocusedResponse
-	(*NavigateRequest)(nil),        // 24: vdb.v1.NavigateRequest
-	(*NavigateResponse)(nil),       // 25: vdb.v1.NavigateResponse
-	(*ScreenshotRequest)(nil),      // 26: vdb.v1.ScreenshotRequest
-	(*ScreenshotResponse)(nil),     // 27: vdb.v1.ScreenshotResponse
-	(*LogRequest)(nil),             // 28: vdb.v1.LogRequest
-	(*LogResponse)(nil),            // 29: vdb.v1.LogResponse
-	(*PushRequest)(nil),            // 30: vdb.v1.PushRequest
-	(*PushResponse)(nil),           // 31: vdb.v1.PushResponse
-	(*PullRequest)(nil),            // 32: vdb.v1.PullRequest
-	(*PullResponse)(nil),           // 33: vdb.v1.PullResponse
-	(*ShellRequest)(nil),           // 34: vdb.v1.ShellRequest
-	(*ShellResponse)(nil),          // 35: vdb.v1.ShellResponse
-	(*WaitIdleRequest)(nil),        // 36: vdb.v1.WaitIdleRequest
-	(*WaitIdleResponse)(nil),       // 37: vdb.v1.WaitIdleResponse
+	(NavigateFailure_Reason)(0),    // 0: vdb.v1.NavigateFailure.Reason
+	(*Target)(nil),                 // 1: vdb.v1.Target
+	(*ListTargetsRequest)(nil),     // 2: vdb.v1.ListTargetsRequest
+	(*ListTargetsResponse)(nil),    // 3: vdb.v1.ListTargetsResponse
+	(*DescribeTargetRequest)(nil),  // 4: vdb.v1.DescribeTargetRequest
+	(*DescribeTargetResponse)(nil), // 5: vdb.v1.DescribeTargetResponse
+	(*InstallRequest)(nil),         // 6: vdb.v1.InstallRequest
+	(*InstallMeta)(nil),            // 7: vdb.v1.InstallMeta
+	(*InstallResponse)(nil),        // 8: vdb.v1.InstallResponse
+	(*UninstallRequest)(nil),       // 9: vdb.v1.UninstallRequest
+	(*LifecycleResponse)(nil),      // 10: vdb.v1.LifecycleResponse
+	(*LaunchRequest)(nil),          // 11: vdb.v1.LaunchRequest
+	(*LaunchResponse)(nil),         // 12: vdb.v1.LaunchResponse
+	(*TerminateRequest)(nil),       // 13: vdb.v1.TerminateRequest
+	(*ListAppsRequest)(nil),        // 14: vdb.v1.ListAppsRequest
+	(*AppInfo)(nil),                // 15: vdb.v1.AppInfo
+	(*ListAppsResponse)(nil),       // 16: vdb.v1.ListAppsResponse
+	(*KeySpec)(nil),                // 17: vdb.v1.KeySpec
+	(*SendKeysRequest)(nil),        // 18: vdb.v1.SendKeysRequest
+	(*FocusState)(nil),             // 19: vdb.v1.FocusState
+	(*SendKeysResponse)(nil),       // 20: vdb.v1.SendKeysResponse
+	(*DescribeUIRequest)(nil),      // 21: vdb.v1.DescribeUIRequest
+	(*DescribeUIResponse)(nil),     // 22: vdb.v1.DescribeUIResponse
+	(*FocusedRequest)(nil),         // 23: vdb.v1.FocusedRequest
+	(*FocusedResponse)(nil),        // 24: vdb.v1.FocusedResponse
+	(*NavigateRequest)(nil),        // 25: vdb.v1.NavigateRequest
+	(*NavigateResponse)(nil),       // 26: vdb.v1.NavigateResponse
+	(*NavigateFailure)(nil),        // 27: vdb.v1.NavigateFailure
+	(*ScreenshotRequest)(nil),      // 28: vdb.v1.ScreenshotRequest
+	(*ScreenshotResponse)(nil),     // 29: vdb.v1.ScreenshotResponse
+	(*LogRequest)(nil),             // 30: vdb.v1.LogRequest
+	(*LogResponse)(nil),            // 31: vdb.v1.LogResponse
+	(*PushRequest)(nil),            // 32: vdb.v1.PushRequest
+	(*PushResponse)(nil),           // 33: vdb.v1.PushResponse
+	(*PullRequest)(nil),            // 34: vdb.v1.PullRequest
+	(*PullResponse)(nil),           // 35: vdb.v1.PullResponse
+	(*ShellRequest)(nil),           // 36: vdb.v1.ShellRequest
+	(*ShellResponse)(nil),          // 37: vdb.v1.ShellResponse
+	(*WaitIdleRequest)(nil),        // 38: vdb.v1.WaitIdleRequest
+	(*WaitIdleResponse)(nil),       // 39: vdb.v1.WaitIdleResponse
 }
 var file_vdb_v1_vdb_proto_depIdxs = []int32{
-	0,  // 0: vdb.v1.ListTargetsResponse.targets:type_name -> vdb.v1.Target
-	0,  // 1: vdb.v1.DescribeTargetResponse.target:type_name -> vdb.v1.Target
-	6,  // 2: vdb.v1.InstallRequest.meta:type_name -> vdb.v1.InstallMeta
-	14, // 3: vdb.v1.ListAppsResponse.apps:type_name -> vdb.v1.AppInfo
-	16, // 4: vdb.v1.SendKeysRequest.keys:type_name -> vdb.v1.KeySpec
-	18, // 5: vdb.v1.SendKeysResponse.focus:type_name -> vdb.v1.FocusState
-	18, // 6: vdb.v1.FocusedResponse.focus:type_name -> vdb.v1.FocusState
-	18, // 7: vdb.v1.NavigateResponse.reached:type_name -> vdb.v1.FocusState
-	1,  // 8: vdb.v1.Companion.ListTargets:input_type -> vdb.v1.ListTargetsRequest
-	3,  // 9: vdb.v1.Companion.DescribeTarget:input_type -> vdb.v1.DescribeTargetRequest
-	5,  // 10: vdb.v1.Companion.Install:input_type -> vdb.v1.InstallRequest
-	8,  // 11: vdb.v1.Companion.Uninstall:input_type -> vdb.v1.UninstallRequest
-	10, // 12: vdb.v1.Companion.Launch:input_type -> vdb.v1.LaunchRequest
-	12, // 13: vdb.v1.Companion.Terminate:input_type -> vdb.v1.TerminateRequest
-	13, // 14: vdb.v1.Companion.ListApps:input_type -> vdb.v1.ListAppsRequest
-	17, // 15: vdb.v1.Companion.SendKeys:input_type -> vdb.v1.SendKeysRequest
-	20, // 16: vdb.v1.Companion.DescribeUI:input_type -> vdb.v1.DescribeUIRequest
-	22, // 17: vdb.v1.Companion.Focused:input_type -> vdb.v1.FocusedRequest
-	24, // 18: vdb.v1.Companion.Navigate:input_type -> vdb.v1.NavigateRequest
-	26, // 19: vdb.v1.Companion.Screenshot:input_type -> vdb.v1.ScreenshotRequest
-	28, // 20: vdb.v1.Companion.Log:input_type -> vdb.v1.LogRequest
-	30, // 21: vdb.v1.Companion.Push:input_type -> vdb.v1.PushRequest
-	32, // 22: vdb.v1.Companion.Pull:input_type -> vdb.v1.PullRequest
-	34, // 23: vdb.v1.Companion.Shell:input_type -> vdb.v1.ShellRequest
-	36, // 24: vdb.v1.Companion.WaitIdle:input_type -> vdb.v1.WaitIdleRequest
-	2,  // 25: vdb.v1.Companion.ListTargets:output_type -> vdb.v1.ListTargetsResponse
-	4,  // 26: vdb.v1.Companion.DescribeTarget:output_type -> vdb.v1.DescribeTargetResponse
-	7,  // 27: vdb.v1.Companion.Install:output_type -> vdb.v1.InstallResponse
-	9,  // 28: vdb.v1.Companion.Uninstall:output_type -> vdb.v1.LifecycleResponse
-	11, // 29: vdb.v1.Companion.Launch:output_type -> vdb.v1.LaunchResponse
-	9,  // 30: vdb.v1.Companion.Terminate:output_type -> vdb.v1.LifecycleResponse
-	15, // 31: vdb.v1.Companion.ListApps:output_type -> vdb.v1.ListAppsResponse
-	19, // 32: vdb.v1.Companion.SendKeys:output_type -> vdb.v1.SendKeysResponse
-	21, // 33: vdb.v1.Companion.DescribeUI:output_type -> vdb.v1.DescribeUIResponse
-	23, // 34: vdb.v1.Companion.Focused:output_type -> vdb.v1.FocusedResponse
-	25, // 35: vdb.v1.Companion.Navigate:output_type -> vdb.v1.NavigateResponse
-	27, // 36: vdb.v1.Companion.Screenshot:output_type -> vdb.v1.ScreenshotResponse
-	29, // 37: vdb.v1.Companion.Log:output_type -> vdb.v1.LogResponse
-	31, // 38: vdb.v1.Companion.Push:output_type -> vdb.v1.PushResponse
-	33, // 39: vdb.v1.Companion.Pull:output_type -> vdb.v1.PullResponse
-	35, // 40: vdb.v1.Companion.Shell:output_type -> vdb.v1.ShellResponse
-	37, // 41: vdb.v1.Companion.WaitIdle:output_type -> vdb.v1.WaitIdleResponse
-	25, // [25:42] is the sub-list for method output_type
-	8,  // [8:25] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	1,  // 0: vdb.v1.ListTargetsResponse.targets:type_name -> vdb.v1.Target
+	1,  // 1: vdb.v1.DescribeTargetResponse.target:type_name -> vdb.v1.Target
+	7,  // 2: vdb.v1.InstallRequest.meta:type_name -> vdb.v1.InstallMeta
+	15, // 3: vdb.v1.ListAppsResponse.apps:type_name -> vdb.v1.AppInfo
+	17, // 4: vdb.v1.SendKeysRequest.keys:type_name -> vdb.v1.KeySpec
+	19, // 5: vdb.v1.SendKeysResponse.focus:type_name -> vdb.v1.FocusState
+	19, // 6: vdb.v1.FocusedResponse.focus:type_name -> vdb.v1.FocusState
+	19, // 7: vdb.v1.NavigateResponse.reached:type_name -> vdb.v1.FocusState
+	27, // 8: vdb.v1.NavigateResponse.failure:type_name -> vdb.v1.NavigateFailure
+	0,  // 9: vdb.v1.NavigateFailure.reason:type_name -> vdb.v1.NavigateFailure.Reason
+	19, // 10: vdb.v1.NavigateFailure.focus:type_name -> vdb.v1.FocusState
+	2,  // 11: vdb.v1.Companion.ListTargets:input_type -> vdb.v1.ListTargetsRequest
+	4,  // 12: vdb.v1.Companion.DescribeTarget:input_type -> vdb.v1.DescribeTargetRequest
+	6,  // 13: vdb.v1.Companion.Install:input_type -> vdb.v1.InstallRequest
+	9,  // 14: vdb.v1.Companion.Uninstall:input_type -> vdb.v1.UninstallRequest
+	11, // 15: vdb.v1.Companion.Launch:input_type -> vdb.v1.LaunchRequest
+	13, // 16: vdb.v1.Companion.Terminate:input_type -> vdb.v1.TerminateRequest
+	14, // 17: vdb.v1.Companion.ListApps:input_type -> vdb.v1.ListAppsRequest
+	18, // 18: vdb.v1.Companion.SendKeys:input_type -> vdb.v1.SendKeysRequest
+	21, // 19: vdb.v1.Companion.DescribeUI:input_type -> vdb.v1.DescribeUIRequest
+	23, // 20: vdb.v1.Companion.Focused:input_type -> vdb.v1.FocusedRequest
+	25, // 21: vdb.v1.Companion.Navigate:input_type -> vdb.v1.NavigateRequest
+	28, // 22: vdb.v1.Companion.Screenshot:input_type -> vdb.v1.ScreenshotRequest
+	30, // 23: vdb.v1.Companion.Log:input_type -> vdb.v1.LogRequest
+	32, // 24: vdb.v1.Companion.Push:input_type -> vdb.v1.PushRequest
+	34, // 25: vdb.v1.Companion.Pull:input_type -> vdb.v1.PullRequest
+	36, // 26: vdb.v1.Companion.Shell:input_type -> vdb.v1.ShellRequest
+	38, // 27: vdb.v1.Companion.WaitIdle:input_type -> vdb.v1.WaitIdleRequest
+	3,  // 28: vdb.v1.Companion.ListTargets:output_type -> vdb.v1.ListTargetsResponse
+	5,  // 29: vdb.v1.Companion.DescribeTarget:output_type -> vdb.v1.DescribeTargetResponse
+	8,  // 30: vdb.v1.Companion.Install:output_type -> vdb.v1.InstallResponse
+	10, // 31: vdb.v1.Companion.Uninstall:output_type -> vdb.v1.LifecycleResponse
+	12, // 32: vdb.v1.Companion.Launch:output_type -> vdb.v1.LaunchResponse
+	10, // 33: vdb.v1.Companion.Terminate:output_type -> vdb.v1.LifecycleResponse
+	16, // 34: vdb.v1.Companion.ListApps:output_type -> vdb.v1.ListAppsResponse
+	20, // 35: vdb.v1.Companion.SendKeys:output_type -> vdb.v1.SendKeysResponse
+	22, // 36: vdb.v1.Companion.DescribeUI:output_type -> vdb.v1.DescribeUIResponse
+	24, // 37: vdb.v1.Companion.Focused:output_type -> vdb.v1.FocusedResponse
+	26, // 38: vdb.v1.Companion.Navigate:output_type -> vdb.v1.NavigateResponse
+	29, // 39: vdb.v1.Companion.Screenshot:output_type -> vdb.v1.ScreenshotResponse
+	31, // 40: vdb.v1.Companion.Log:output_type -> vdb.v1.LogResponse
+	33, // 41: vdb.v1.Companion.Push:output_type -> vdb.v1.PushResponse
+	35, // 42: vdb.v1.Companion.Pull:output_type -> vdb.v1.PullResponse
+	37, // 43: vdb.v1.Companion.Shell:output_type -> vdb.v1.ShellResponse
+	39, // 44: vdb.v1.Companion.WaitIdle:output_type -> vdb.v1.WaitIdleResponse
+	28, // [28:45] is the sub-list for method output_type
+	11, // [11:28] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_vdb_v1_vdb_proto_init() }
@@ -2320,13 +2467,14 @@ func file_vdb_v1_vdb_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_vdb_v1_vdb_proto_rawDesc), len(file_vdb_v1_vdb_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   38,
+			NumEnums:      1,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_vdb_v1_vdb_proto_goTypes,
 		DependencyIndexes: file_vdb_v1_vdb_proto_depIdxs,
+		EnumInfos:         file_vdb_v1_vdb_proto_enumTypes,
 		MessageInfos:      file_vdb_v1_vdb_proto_msgTypes,
 	}.Build()
 	File_vdb_v1_vdb_proto = out.File

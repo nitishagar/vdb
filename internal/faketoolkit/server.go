@@ -214,6 +214,19 @@ func PNGWithByte(i, v byte) []byte {
 	return b
 }
 
+// ChurnSteps returns n page-source steps whose content differs on every
+// call — a tree that never stabilizes (wait_idle failure-path fixture).
+func ChurnSteps(n int) []Step {
+	steps := make([]Step, n)
+	for i := range steps {
+		steps[i] = XMLStep(fmt.Sprintf(
+			`<root><app id="churn"><window x="0" y="0" width="1920" height="1080">`+
+				`<child x="100" y="%d" width="400" height="80" role="row" test_id="row-%d" focusable="true" focused="true"/>`+
+				`</window></app></root>`, 100+i, i))
+	}
+	return steps
+}
+
 // KnownMethods lists methods that have scripts installed (diagnostics).
 func (s *Server) KnownMethods() []string {
 	s.mu.Lock()

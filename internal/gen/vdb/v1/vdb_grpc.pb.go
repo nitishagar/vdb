@@ -76,8 +76,9 @@ type CompanionClient interface {
 	Focused(ctx context.Context, in *FocusedRequest, opts ...grpc.CallOption) (*FocusedResponse, error)
 	// Navigate streams one update per executed step, then the final focus.
 	Navigate(ctx context.Context, in *NavigateRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[NavigateResponse], error)
-	// Screenshot is a validated capture; oversized payloads error with
-	// RESOURCE_EXHAUSTED rather than truncating.
+	// Screenshot is a validated capture; payloads above the companion's
+	// explicit limit (64 MiB by default) error with RESOURCE_EXHAUSTED
+	// rather than truncating.
 	Screenshot(ctx context.Context, in *ScreenshotRequest, opts ...grpc.CallOption) (*ScreenshotResponse, error)
 	// Log streams device log lines until the client cancels.
 	Log(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogResponse], error)
@@ -86,7 +87,9 @@ type CompanionClient interface {
 	Pull(ctx context.Context, in *PullRequest, opts ...grpc.CallOption) (*PullResponse, error)
 	Shell(ctx context.Context, in *ShellRequest, opts ...grpc.CallOption) (*ShellResponse, error)
 	// WaitIdle blocks until the tree hash is stable for stable_ms
-	// (poll_ms cadence) or timeout_ms elapses.
+	// (poll_ms cadence) or timeout_ms elapses. A timeout is a SUCCESS-shaped
+	// response with stable=false (not an error); errors are reserved for
+	// transport failure and caller cancellation.
 	WaitIdle(ctx context.Context, in *WaitIdleRequest, opts ...grpc.CallOption) (*WaitIdleResponse, error)
 }
 
@@ -314,8 +317,9 @@ type CompanionServer interface {
 	Focused(context.Context, *FocusedRequest) (*FocusedResponse, error)
 	// Navigate streams one update per executed step, then the final focus.
 	Navigate(*NavigateRequest, grpc.ServerStreamingServer[NavigateResponse]) error
-	// Screenshot is a validated capture; oversized payloads error with
-	// RESOURCE_EXHAUSTED rather than truncating.
+	// Screenshot is a validated capture; payloads above the companion's
+	// explicit limit (64 MiB by default) error with RESOURCE_EXHAUSTED
+	// rather than truncating.
 	Screenshot(context.Context, *ScreenshotRequest) (*ScreenshotResponse, error)
 	// Log streams device log lines until the client cancels.
 	Log(*LogRequest, grpc.ServerStreamingServer[LogResponse]) error
@@ -324,7 +328,9 @@ type CompanionServer interface {
 	Pull(context.Context, *PullRequest) (*PullResponse, error)
 	Shell(context.Context, *ShellRequest) (*ShellResponse, error)
 	// WaitIdle blocks until the tree hash is stable for stable_ms
-	// (poll_ms cadence) or timeout_ms elapses.
+	// (poll_ms cadence) or timeout_ms elapses. A timeout is a SUCCESS-shaped
+	// response with stable=false (not an error); errors are reserved for
+	// transport failure and caller cancellation.
 	WaitIdle(context.Context, *WaitIdleRequest) (*WaitIdleResponse, error)
 	mustEmbedUnimplementedCompanionServer()
 }

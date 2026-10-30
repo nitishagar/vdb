@@ -396,6 +396,15 @@ type SummaryNode struct {
 	Focusable bool   `json:"focusable,omitempty"`
 }
 
+// MarshalJSONString serializes the summary.
+func (s Summary) MarshalJSONString() (string, error) {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 // String renders the summary as an indented outline.
 func (s Summary) String() string {
 	var b strings.Builder

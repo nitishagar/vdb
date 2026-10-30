@@ -161,8 +161,11 @@ func (i *Impl) StartLogStream(ctx context.Context, serial string) (*LogStream, e
 		for sc.Scan() {
 			select {
 			case s.lines <- sc.Text():
+			case <-s.stop:
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				return
 			case <-ctx.Done():
-				_ = cmd.Process.Kill()
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 				return
 			}
 		}
