@@ -1,0 +1,5 @@
+List of devices attached
+AFTVTEST001	device	product:vega	model:Fire_TV_Stick_4K	transport:usb
+emulator-5554	device	product:vvd	model:VVD	transport:tcp
+AFTVOFFLINE	offline	product:vega	model:Stick	transport:usb
+

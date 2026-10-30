@@ -1,0 +1,4 @@
+thoughts/
+*.local.md
+/tmp/
+/dist/
