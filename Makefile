@@ -1,7 +1,8 @@
-# vdb build gates. The check target grows with the project:
-#   S1: lint + build + test + repo-lint   (this file)
-#   S4: buf.yaml appears -> generate runs for real (+ drift check joins check)
-#   S6: e2e/ appears -> e2e runs for real (and joins check)
+# vdb build gates (make check): gofmt+vet, build, race tests, codegen drift
+# (buf generate -> git diff on internal/gen/ and proto/), repo-lint (also
+# fails naming any missing gate input: buf.yaml, buf.gen.yaml, the proto,
+# e2e tests), and the e2e suite. CI (.github/workflows/ci.yml) runs make
+# check on every push; buf and the protoc plugins are installed there.
 GO ?= go
 
 .PHONY: lint build test generate e2e check repo-lint generate-drift
@@ -17,16 +18,16 @@ test:
 	$(GO) test ./... -race -count=1
 
 generate:
-	@if [ -f buf.yaml ]; then PATH="$$HOME/go/bin:$$PATH" buf generate; else echo "generate: no buf.yaml yet (pre-proto stage)"; fi
+	@PATH="$$HOME/go/bin:$$PATH" buf generate
 
+# Two steps, separately reported: a buf failure (missing buf, bad buf.yaml)
+# is not the same failure as codegen drift.
 generate-drift:
-	@if [ -f buf.yaml ]; then \
-		PATH="$$HOME/go/bin:$$PATH" buf generate && \
-		git diff --exit-code -- internal/gen/ proto/ || { echo "codegen drift: regenerate and commit (make generate)"; exit 1; }; \
-	else echo "generate-drift: no buf.yaml yet"; fi
+	@PATH="$$HOME/go/bin:$$PATH" buf generate
+	@git diff --exit-code -- internal/gen/ proto/ || { echo "codegen drift: regenerate and commit (make generate)"; exit 1; }
 
 e2e:
-	@if [ -d e2e ]; then $(GO) test --tags e2e ./e2e/ -race -count=1; else echo "e2e: no e2e/ yet"; fi
+	@$(GO) test --tags e2e ./e2e/ -race -count=1
 
 repo-lint:
 	bash scripts/repo-lint.sh

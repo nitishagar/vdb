@@ -37,6 +37,18 @@ else
 	fail ".gitignore must exclude thoughts/"
 fi
 
+# Required gate inputs (Spec 2: no silently-absent gate). If any of these
+# is missing, make check must exit non-zero naming it — the Makefile's old
+# stage-bootstrap fallbacks made a missing buf.yaml/e2e/ silently green.
+for p in buf.yaml buf.gen.yaml proto/vdb/v1/vdb.proto; do
+	if [ ! -f "$p" ]; then
+		fail "required gate input missing: $p"
+	fi
+done
+if ! ls e2e/*_test.go >/dev/null 2>&1; then
+	fail "required gate input missing: e2e/*_test.go (e2e/ with at least one test)"
+fi
+
 # No tracked blobs over 1 MiB (would indicate bundled binaries, e.g. SDK parts).
 big=$(git ls-files -z 2>/dev/null | xargs -0 -r stat -c '%s %n' 2>/dev/null | awk '$1 > 1048576 {print}')
 if [ -n "$big" ]; then

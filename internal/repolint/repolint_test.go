@@ -96,3 +96,41 @@ func TestRepoLintFailsOnViolations(t *testing.T) {
 		}
 	}
 }
+
+// TestRepoLintFailsOnMissingGates (Spec 2: no silently-absent gate): a repo
+// that is otherwise perfectly clean but lacks any required gate input
+// (buf.yaml, buf.gen.yaml, the proto, e2e tests) must fail repo-lint naming
+// each missing input. Fails before the rule exists ("should mention …"),
+// frozen after — the fix must make it pass without editing this test.
+func TestRepoLintFailsOnMissingGates(t *testing.T) {
+	dir := t.TempDir()
+	git := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	git("init", "-q", "-b", "main")
+	git("config", "user.email", "t@t")
+	git("config", "user.name", "t")
+	// Everything EXCEPT the gate inputs: a valid-looking repo that would
+	// have passed repo-lint before the missing-gates rule.
+	script := "cd " + dir + " && " +
+		"printf 'This is Apache License Version 2.0, January 2004\\n' > LICENSE && " +
+		"echo 'not affiliated with Amazon' > README.md && " +
+		"printf 'thoughts/\\n' > .gitignore && " +
+		"git add -A && git commit -qm x"
+	if err := exec.Command("bash", "-c", script).Run(); err != nil {
+		t.Fatalf("fixture repo: %v", err)
+	}
+	out, ok := runScript(t, dir)
+	if ok {
+		t.Fatalf("repo-lint must fail when gate inputs are missing, passed with:\n%s", out)
+	}
+	for _, want := range []string{"buf.yaml", "buf.gen.yaml", "vdb.proto", "e2e"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("should mention missing gate input %q:\n%s", want, out)
+		}
+	}
+}
