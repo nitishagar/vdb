@@ -19,6 +19,13 @@ can drive a TV the way `idb` drives an iPhone.
 
 > **Status:** v0.1.x is verified against in-repo fakes only. It has not been run against a real Fire TV device or Vega SDK; Vega CLI syntax and toolkit JSON-RPC shapes are assumptions isolated in `internal/vegacli` and `internal/toolkit`.
 
+## Demo
+
+![vdb demo: list targets, install, launch, describe the UI, navigate by selector, press keys, screenshot, wait-idle — against the in-repo fakes](docs/demo.gif)
+
+*No Fire TV device needed for this demo: it is the real `vdb` CLI driving the
+in-repo fakes (the same loop the e2e suite runs). Output is unedited.*
+
 ## What you get
 
 - **`vdb-companion`** — a per-host gRPC daemon (`vdb.v1`, default
