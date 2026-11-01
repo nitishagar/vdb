@@ -15,7 +15,9 @@ can drive a TV the way `idb` drives an iPhone.
 > Amazon.com, Inc. vdb never bundles or redistributes any Amazon SDK
 > materials — it orchestrates the *user's own* installed Vega SDK tools
 > (`vda`, `vega`) as subprocesses and talks only to Amazon-designated
-> interfaces (the automation toolkit's documented JSON-RPC surface).
+> interfaces (the automation toolkit's JSON-RPC surface).
+
+> **Status:** v0.1.x is verified against in-repo fakes only. It has not been run against a real Fire TV device or Vega SDK; Vega CLI syntax and toolkit JSON-RPC shapes are assumptions isolated in `internal/vegacli` and `internal/toolkit`.
 
 ## What you get
 
@@ -96,7 +98,7 @@ make generate   # buf codegen (requires buf + protoc-gen-go[-grpc])
 ```
 
 Everything is tested against fakes (`internal/fakevda`,
-`internal/faketoolkit`) that encode the observed toolkit quirks (null-buffer
+`internal/faketoolkit`) that model the toolkit quirks we expect (null-buffer
 screenshots, stale frames, multi-app trees, the focus-alignment defect).
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 [docs/TESTING.md](docs/TESTING.md).
