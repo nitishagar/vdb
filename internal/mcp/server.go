@@ -101,7 +101,7 @@ func (s *Server) dispatch(ctx context.Context, msg rpcMsg) (any, error) {
 		return map[string]any{
 			"protocolVersion": ProtocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "vdb", "version": "0.1.0"},
+			"serverInfo":      map[string]any{"name": "vdb", "version": "0.1.1"},
 		}, nil
 	case "tools/list":
 		return map[string]any{"tools": tools()}, nil
